@@ -33,7 +33,7 @@ export default function App() {
         <div className="header-inner">
           <div className="brand-block">
             <div className="brand-icon">
-              <Layers size={24} />
+              <img src="/pipeline-icon.png" alt="Pipeline Logo" className="brand-logo-img" />
             </div>
             <div>
               <h1 className="brand-title">SELF-DIAGNOSING AI PIPELINE ORCHESTRATOR</h1>

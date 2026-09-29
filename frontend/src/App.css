@@ -86,14 +86,23 @@ body {
 }
 
 .brand-icon {
-  background-color: var(--blue-600);
-  color: white;
-  width: 40px;
-  height: 40px;
+  background-color: #ffffff;
+  border: 1px solid var(--navy-700);
+  width: 42px;
+  height: 42px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius);
+  border-radius: 8px;
+  padding: 4px;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.brand-logo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .brand-title {
