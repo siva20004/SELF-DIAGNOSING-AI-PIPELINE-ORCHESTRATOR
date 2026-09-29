@@ -15,11 +15,22 @@ for p in env_paths:
         load_dotenv(p)
         break
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://pipeline_user:pipeline_pass@localhost:5432/orchestrator_db")
+_raw_url = os.getenv("DATABASE_URL", "postgresql://pipeline_user:pipeline_pass@localhost:5432/orchestrator_db")
 
-# Cloud providers often output postgres:// instead of postgresql://
-if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+# Normalize cloud postgres URLs (convert postgres:// to postgresql://)
+if _raw_url.startswith("postgres://"):
+    _raw_url = _raw_url.replace("postgres://", "postgresql://", 1)
+elif _raw_url.startswith("postgresql+psycopg2://"):
+    _raw_url = _raw_url.replace("postgresql+psycopg2://", "postgresql://", 1)
+
+# Clean URL for direct psycopg2 connections (e.g. COPY expert)
+RAW_DATABASE_URL = _raw_url
+
+# SQLAlchemy URL: explicitly specify +psycopg2 dialect driver so SQLAlchemy doesn't look for 'psycopg' (psycopg 3)
+if RAW_DATABASE_URL.startswith("postgresql://") and not RAW_DATABASE_URL.startswith("postgresql+"):
+    DATABASE_URL = RAW_DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
+else:
+    DATABASE_URL = RAW_DATABASE_URL
 
 # Configure SQLAlchemy engine with pooling and pre-ping
 connect_args = {}

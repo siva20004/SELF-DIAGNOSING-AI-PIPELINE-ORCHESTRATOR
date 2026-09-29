@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 import polars as pl
 import psycopg2
 
-from app.database.session import DATABASE_URL
+from app.database.session import DATABASE_URL, RAW_DATABASE_URL
 from app.models.models import (
     Dataset,
     PipelineRun,
@@ -180,7 +180,7 @@ def execute_pipeline(dataset_id: str, db: Session) -> PipelineExecutionResponse:
         storage_df.write_csv(csv_buffer)
         csv_buffer.seek(0)
 
-        conn = psycopg2.connect(DATABASE_URL)
+        conn = psycopg2.connect(RAW_DATABASE_URL)
         cur = conn.cursor()
         copy_sql = f"""
             COPY processed_transactions (
