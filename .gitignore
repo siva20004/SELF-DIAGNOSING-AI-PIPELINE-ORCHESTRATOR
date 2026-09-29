@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+
+# Node / Frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+.npm
+*.log
+
+# Environment & Secrets
+.env
+backend/.env
+frontend/.env
+*.local
+
+# Uploads & Large datasets (Files > 100MB exceed GitHub limit)
+backend/uploads/*
+!backend/uploads/.gitkeep
+sales_transactions_1M_valid.csv
+*.zip
+
+# OS
+.DS_Store
+Thumbs.db

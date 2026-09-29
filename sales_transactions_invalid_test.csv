@@ -1,0 +1,11 @@
+transaction_id,customer_id,product_id,customer_name,city,state,customer_segment,product_name,category,quantity,unit_price,total_amount,payment_method,transaction_status,transaction_date,source_system
+T90000001,C100001,P001,Ravi Kumar,Hyderabad,Telangana,Regular,Laptop,Electronics,2,55000,110000,UPI,COMPLETED,2026-09-20,WEB
+T90000002,C100002,P002,Ananya Rao,Vijayawada,Andhra Pradesh,Premium,Wireless Mouse,Accessories,five,850,850,CARD,COMPLETED,2026-09-20,MOBILE
+T90000003,C100003,P003,Siva Reddy,Tenali,Andhra Pradesh,Regular,Keyboard,Accessories,2,1400,-2800,UPI,COMPLETED,2026-09-20,WEB
+T90000004,C100004,P004,Priya Sharma,Chennai,Tamil Nadu,Gold,Monitor,Electronics,1,14500,14500,UPI,COMPLETED,2026-09-20,POS
+T90000005,C100005,P005,Arjun Patel,Bengaluru,Karnataka,Enterprise,Smartphone,Electronics,1,28000,28000,CARD,COMPLETED,20-09-2026,WEB
+T90000006,C100006,P006,Meera Das,Kochi,Kerala,Student,Tablet,Electronics,1,22000,22000,UPI,PENDING,,MOBILE
+T90000007,C100007,P007,Rahul Singh,Mumbai,Maharashtra,Regular,Headphones,Audio,3,3200,5000,CARD,COMPLETED,2026-09-21,WEB
+T90000008,C100008,P008,Kavya Iyer,Pune,Maharashtra,Premium,USB Cable,Accessories,25,450,11250,WALLET,COMPLETED,2026-09-21,MOBILE
+T90000009,C100009,PX99,Neha Verma,Delhi,Delhi,Regular,Unknown,Accessories,1,100,100,COD,COMPLETED,2026-09-21,POS
+T90000009,C100010,P009,Isha Rao,Kolkata,West Bengal,Enterprise,Power Bank,Accessories,2,1800,3600,NETBANKING,COMPLETED,2026-09-21,PARTNER

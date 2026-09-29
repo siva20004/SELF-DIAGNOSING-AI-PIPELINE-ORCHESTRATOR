@@ -1,0 +1,84 @@
+# Sales Transaction Data Contract
+dataset: sales_transactions
+contract_version: "1.0"
+
+schema:
+  transaction_id:
+    type: string
+    required: true
+    pattern: "^T[0-9]{8}$"
+
+  customer_id:
+    type: string
+    required: true
+    pattern: "^C[0-9]{6}$"
+
+  product_id:
+    type: string
+    required: true
+    pattern: "^P[0-9]{3}$"
+
+  customer_name:
+    type: string
+    required: true
+
+  city:
+    type: string
+    required: true
+
+  state:
+    type: string
+    required: true
+
+  customer_segment:
+    type: string
+    required: true
+    allowed_values: [Regular, Premium, Enterprise, Student]
+
+  product_name:
+    type: string
+    required: true
+
+  category:
+    type: string
+    required: true
+
+  quantity:
+    type: integer
+    required: true
+    min: 1
+    max: 20
+
+  unit_price:
+    type: number
+    required: true
+    min: 0
+
+  total_amount:
+    type: number
+    required: true
+    min: 0
+
+  payment_method:
+    type: string
+    required: true
+    allowed_values: [UPI, CARD, NETBANKING, COD, WALLET]
+
+  transaction_status:
+    type: string
+    required: true
+    allowed_values: [COMPLETED, PENDING, CANCELLED]
+
+  transaction_date:
+    type: date
+    required: true
+
+  source_system:
+    type: string
+    required: true
+    allowed_values: [WEB, MOBILE, POS, PARTNER]
+
+quality_rules:
+  total_amount_equals_quantity_times_unit_price: true
+  transaction_id_unique: true
+  null_values_allowed: false
