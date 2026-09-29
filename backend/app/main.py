@@ -8,8 +8,19 @@ from app.api.routes import router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialize database tables on startup
-    init_db()
+    # Initialize database tables on startup with retry logic for cloud/serverless DBs like Neon
+    try:
+        init_db()
+        print("INFO: Database tables verified and initialized successfully.")
+    except Exception as e:
+        print(f"WARNING: Initial DB connection failed ({e}). Retrying in 2 seconds...")
+        import time
+        time.sleep(2)
+        try:
+            init_db()
+            print("INFO: Database tables initialized successfully on retry.")
+        except Exception as retry_err:
+            print(f"ERROR: Database initialization retry failed: {retry_err}")
     yield
 
 
@@ -49,4 +60,5 @@ def health():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("app.main:app", host="0.0.0.0", port=port)

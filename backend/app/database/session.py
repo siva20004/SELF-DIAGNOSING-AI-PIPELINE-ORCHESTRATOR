@@ -17,11 +17,21 @@ for p in env_paths:
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://pipeline_user:pipeline_pass@localhost:5432/orchestrator_db")
 
+# Cloud providers often output postgres:// instead of postgresql://
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+# Configure SQLAlchemy engine with pooling and pre-ping
+connect_args = {}
+if "sslmode=require" in DATABASE_URL:
+    connect_args["sslmode"] = "require"
+
 engine = create_engine(
     DATABASE_URL,
-    pool_size=10,
-    max_overflow=20,
-    pool_pre_ping=True
+    pool_size=5,
+    max_overflow=10,
+    pool_pre_ping=True,
+    connect_args=connect_args
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
