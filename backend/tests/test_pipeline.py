@@ -203,3 +203,54 @@ def test_pipeline_execution_and_persistence(tmp_path):
 
     finally:
         db.close()
+
+
+def test_user_registration_and_login():
+    from app.services.auth import register_user, login_user
+    from app.schemas.schemas import UserRegisterRequest, UserLoginRequest
+    from app.models.models import User
+
+    db = SessionLocal()
+    test_email = "tester_demo@example.com"
+    try:
+        # Clean up if exists
+        db.query(User).filter(User.email == test_email).delete()
+        db.commit()
+
+        # 1. Register
+        reg_data = UserRegisterRequest(
+            first_name="Jane",
+            last_name="Doe",
+            country="United States",
+            email=test_email,
+            password="secretPassword123"
+        )
+        auth_resp = register_user(db, reg_data)
+        assert auth_resp.user.email == test_email
+        assert auth_resp.user.first_name == "Jane"
+        assert auth_resp.token.startswith("agy_")
+
+        # Verify password is encrypted in database (not plain text)
+        db_user = db.query(User).filter(User.email == test_email).first()
+        assert db_user is not None
+        assert db_user.hashed_password != "secretPassword123"
+
+        # 2. Login
+        login_data = UserLoginRequest(
+            email=test_email,
+            password="secretPassword123"
+        )
+        login_resp = login_user(db, login_data)
+        assert login_resp.user.email == test_email
+        assert login_resp.token.startswith("agy_")
+
+        # 3. Invalid Login Check
+        with pytest.raises(Exception):
+            login_user(db, UserLoginRequest(email=test_email, password="wrongPassword"))
+
+        # Clean up
+        db.query(User).filter(User.email == test_email).delete()
+        db.commit()
+    finally:
+        db.close()
+

@@ -119,5 +119,17 @@ class SalesAggregate(Base):
     transaction_count = Column(BigInteger, nullable=False)
     total_quantity = Column(BigInteger, nullable=False)
     total_sales = Column(Numeric(14, 2), nullable=False)
-
     run = relationship("PipelineRun", back_populates="aggregates")
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    first_name = Column(String(128), nullable=False)
+    last_name = Column(String(128), nullable=False)
+    country = Column(String(128), nullable=False, default="United States")
+    email = Column(String(255), unique=True, index=True, nullable=False)
+    hashed_password = Column(String(255), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now(), nullable=False)
+

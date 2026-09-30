@@ -13,11 +13,16 @@ from app.schemas.schemas import (
     PipelineExecutionResponse,
     PipelineTaskItem,
     PipelineResultsResponse,
+    UserRegisterRequest,
+    UserLoginRequest,
+    UserResponse,
+    AuthResponse,
 )
 from app.services.ingestion import handle_file_upload, get_dataset_preview, get_dataset_file_path
 from app.services.contract_loader import load_contract
 from app.services.validator import validate_dataset
 from app.services.pipeline_executor import execute_pipeline, get_pipeline_results
+from app.services.auth import register_user, login_user, get_user_by_id
 
 router = APIRouter(prefix="/api", tags=["Pipeline Orchestrator"])
 
@@ -177,3 +182,35 @@ def get_run_results(
 ):
     """Retrieves final calculated metrics, city/category/date aggregates, and tasks."""
     return get_pipeline_results(run_id, db)
+
+
+# ==========================================
+# AUTHENTICATION ENDPOINTS
+# ==========================================
+
+@router.post("/auth/register", response_model=AuthResponse)
+def register(
+    data: UserRegisterRequest,
+    db: Session = Depends(get_db)
+):
+    """Registers a new user with hashed password and stores in PostgreSQL."""
+    return register_user(db, data)
+
+
+@router.post("/auth/login", response_model=AuthResponse)
+def login(
+    data: UserLoginRequest,
+    db: Session = Depends(get_db)
+):
+    """Authenticates an existing user and returns token and user profile."""
+    return login_user(db, data)
+
+
+@router.get("/auth/me/{user_id}", response_model=UserResponse)
+def get_user_profile(
+    user_id: int,
+    db: Session = Depends(get_db)
+):
+    """Fetches user profile by ID."""
+    return get_user_by_id(db, user_id)
+

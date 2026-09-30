@@ -62,7 +62,25 @@ export const getRunResults = async (runId) => {
   return response.data;
 };
 
+export const registerUser = async (userData) => {
+  const response = await client.post('/api/auth/register', userData);
+  return response.data;
+};
+
+export const loginUser = async (credentials) => {
+  const response = await client.post('/api/auth/login', credentials);
+  return response.data;
+};
+
+export const getCurrentUser = async (userId) => {
+  const response = await client.get(`/api/auth/me/${userId}`);
+  return response.data;
+};
+
 export default {
+  registerUser,
+  loginUser,
+  getCurrentUser,
   uploadDataset,
   getDataset,
   getDatasetPreview,
@@ -73,3 +91,4 @@ export default {
   getRunTasks,
   getRunResults,
 };
+

@@ -1,13 +1,39 @@
 import React, { useState } from 'react';
-import { Database, ShieldCheck, PlayCircle, RefreshCw, Layers, CheckCircle2 } from 'lucide-react';
+import { Database, ShieldCheck, PlayCircle, RefreshCw, Layers, CheckCircle2, User, LogOut, Globe } from 'lucide-react';
 import DatasetUpload from './components/DatasetUpload';
 import ValidationPanel from './components/ValidationPanel';
 import PipelineExecution from './components/PipelineExecution';
+import AuthCard from './components/AuthCard';
 import './App.css';
 
 export default function App() {
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem('pipeline_auth_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
   const [dataset, setDataset] = useState(null);
   const [validationResult, setValidationResult] = useState(null);
+
+  const handleAuthSuccess = (user, token) => {
+    localStorage.setItem('pipeline_auth_user', JSON.stringify(user));
+    if (token) {
+      localStorage.setItem('pipeline_auth_token', token);
+    }
+    setCurrentUser(user);
+  };
+
+  const handleSignOut = () => {
+    localStorage.removeItem('pipeline_auth_user');
+    localStorage.removeItem('pipeline_auth_token');
+    setCurrentUser(null);
+    setDataset(null);
+    setValidationResult(null);
+  };
 
   const handleDatasetUploaded = (uploadedData) => {
     setDataset(uploadedData);
@@ -25,6 +51,48 @@ export default function App() {
 
   const isStep1Complete = !!dataset;
   const isStep2Complete = validationResult && validationResult.status === 'VALID';
+
+  // If not logged in, show AuthCard
+  if (!currentUser) {
+    return (
+      <div className="app-container auth-page-container">
+        <header className="app-header">
+          <div className="header-inner">
+            <div className="brand-block">
+              <div className="brand-icon">
+                <img src="/pipeline-icon.png" alt="Pipeline Logo" className="brand-logo-img" />
+              </div>
+              <div>
+                <h1 className="brand-title">SELF-DIAGNOSING AI PIPELINE ORCHESTRATOR</h1>
+                <p className="brand-subtitle">
+                  Enterprise Data Platform — Secure Account & Pipeline Orchestration
+                </p>
+              </div>
+            </div>
+            <div className="header-badges">
+              <span className="badge badge-meta">
+                <Database size={13} style={{ marginRight: '5px' }} />
+                PostgreSQL Cloud DB
+              </span>
+            </div>
+          </div>
+        </header>
+
+        <main className="auth-main-wrapper">
+          <AuthCard onAuthSuccess={handleAuthSuccess} />
+        </main>
+
+        <footer className="app-footer">
+          <div>
+            Self-Diagnosing AI Pipeline Orchestrator — Real Ingestion & Execution Pipeline
+          </div>
+          <div className="footer-meta">
+            Polars High-Speed Engine • FastAPI Backend • PostgreSQL Cloud Persistence
+          </div>
+        </footer>
+      </div>
+    );
+  }
 
   return (
     <div className="app-container">
@@ -44,6 +112,13 @@ export default function App() {
           </div>
 
           <div className="header-badges">
+            <span className="badge badge-user-profile">
+              <User size={13} style={{ marginRight: '5px' }} />
+              {currentUser.first_name} {currentUser.last_name}
+              {currentUser.country && (
+                <span className="user-country-tag">({currentUser.country})</span>
+              )}
+            </span>
             <span className="badge badge-meta">
               <Database size={13} style={{ marginRight: '5px' }} />
               PostgreSQL Connected
@@ -58,9 +133,19 @@ export default function App() {
                 New Ingestion
               </button>
             )}
+            <button
+              type="button"
+              className="btn btn-signout"
+              onClick={handleSignOut}
+              title="Sign Out"
+            >
+              <LogOut size={13} style={{ marginRight: '4px' }} />
+              Sign Out
+            </button>
           </div>
         </div>
       </header>
+
 
       {/* Main Workflow Body */}
       <main className="main-content">

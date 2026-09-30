@@ -5,6 +5,7 @@ from app.models.models import (
     ValidationErrorRecord,
     ProcessedTransaction,
     SalesAggregate,
+    User,
 )
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     "ValidationErrorRecord",
     "ProcessedTransaction",
     "SalesAggregate",
+    "User",
 ]

@@ -136,3 +136,33 @@ class PipelineResultsResponse(BaseModel):
     sales_by_category: List[SalesByCategoryItem]
     sales_by_date: List[SalesByDateItem]
     tasks: List[PipelineTaskItem]
+
+
+class UserRegisterRequest(BaseModel):
+    first_name: str
+    last_name: str
+    country: str = "United States"
+    email: str
+    password: str
+
+
+class UserLoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class UserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    first_name: str
+    last_name: str
+    country: str
+    email: str
+    created_at: datetime
+
+
+class AuthResponse(BaseModel):
+    token: str
+    user: UserResponse
+

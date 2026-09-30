@@ -65,5 +65,6 @@ def init_db():
         ValidationErrorRecord,
         ProcessedTransaction,
         SalesAggregate,
+        User,
     )
     Base.metadata.create_all(bind=engine)

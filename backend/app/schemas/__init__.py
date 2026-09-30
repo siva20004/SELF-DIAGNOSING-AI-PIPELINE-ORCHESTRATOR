@@ -11,6 +11,10 @@ from app.schemas.schemas import (
     SalesByDateItem,
     PipelineMetrics,
     PipelineResultsResponse,
+    UserRegisterRequest,
+    UserLoginRequest,
+    UserResponse,
+    AuthResponse,
 )
 
 __all__ = [
@@ -26,4 +30,8 @@ __all__ = [
     "SalesByDateItem",
     "PipelineMetrics",
     "PipelineResultsResponse",
+    "UserRegisterRequest",
+    "UserLoginRequest",
+    "UserResponse",
+    "AuthResponse",
 ]
