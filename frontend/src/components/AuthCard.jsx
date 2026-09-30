@@ -20,7 +20,7 @@ const COUNTRIES = [
 ];
 
 export default function AuthCard({ onAuthSuccess }) {
-  const [mode, setMode] = useState('register'); // 'register' or 'login'
+  const [mode, setMode] = useState('login'); // 'login' or 'register'
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [country, setCountry] = useState('United States');
@@ -96,13 +96,6 @@ export default function AuthCard({ onAuthSuccess }) {
   return (
     <div className="auth-wrapper">
       <div className="auth-card">
-        {/* Top AGY Pill Badge */}
-        <div className="auth-badge-container">
-          <div className="agy-pill">
-            <span className="agy-pill-text">AGY</span>
-          </div>
-        </div>
-
         {/* Title & Subtitle */}
         <h2 className="auth-title">
           {mode === 'register' ? 'Create Your Account' : 'Sign In to Your Account'}
