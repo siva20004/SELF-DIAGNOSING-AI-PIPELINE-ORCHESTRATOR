@@ -70,10 +70,12 @@ export default function AuthCard({ onAuthSuccess }) {
           country
         };
         const res = await registerUser(payload);
-        setSuccessMsg('Account created successfully! Logging you in...');
+        setSuccessMsg('Account created successfully! Please sign in.');
+        setPassword('');
         setTimeout(() => {
-          onAuthSuccess(res.user, res.token);
-        }, 500);
+          setMode('login');
+          setSuccessMsg('');
+        }, 1500);
       } else {
         const payload = {
           email: email.trim().toLowerCase(),
