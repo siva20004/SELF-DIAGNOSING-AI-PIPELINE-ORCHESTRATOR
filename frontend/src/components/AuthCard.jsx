@@ -72,7 +72,7 @@ export default function AuthCard({ onAuthSuccess }) {
         const res = await registerUser(payload);
         setSuccessMsg('Account created successfully! Logging you in...');
         setTimeout(() => {
-          onAuthSuccess(res.user, res.access_token);
+          onAuthSuccess(res.user, res.token);
         }, 500);
       } else {
         const payload = {
@@ -82,7 +82,7 @@ export default function AuthCard({ onAuthSuccess }) {
         const res = await loginUser(payload);
         setSuccessMsg('Login successful!');
         setTimeout(() => {
-          onAuthSuccess(res.user, res.access_token);
+          onAuthSuccess(res.user, res.token);
         }, 500);
       }
     } catch (err) {
