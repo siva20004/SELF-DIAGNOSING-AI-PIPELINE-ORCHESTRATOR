@@ -1,4 +1,6 @@
 import uuid
+import re
+import os
 from typing import List, Optional
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -182,6 +184,63 @@ def get_run_results(
 ):
     """Retrieves final calculated metrics, city/category/date aggregates, and tasks."""
     return get_pipeline_results(run_id, db)
+
+
+# ==========================================
+# DATE FORMAT FIX ENDPOINT
+# ==========================================
+
+@router.post("/datasets/{dataset_id}/fix-date-format")
+def fix_date_format(
+    dataset_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Reads the uploaded dataset, converts transaction_date from dd/mm/yyyy
+    to yyyy-mm-dd (ISO format), overwrites the file, and returns a count
+    of how many dates were converted.
+    """
+    file_path, file_type = get_dataset_file_path(dataset_id, db)
+
+    if file_type.upper() != "CSV":
+        raise HTTPException(status_code=400, detail="Date format fix is currently supported for CSV files only.")
+
+    import polars as pl
+
+    df = pl.read_csv(file_path, infer_schema_length=0)
+
+    if "transaction_date" not in df.columns:
+        raise HTTPException(status_code=400, detail="Column 'transaction_date' not found in dataset.")
+
+    col = df["transaction_date"].cast(pl.String)
+
+    # Detect dd/mm/yyyy or dd-mm-yyyy pattern and convert to yyyy-mm-dd
+    dd_mm_yyyy_pattern = r"^(\d{2})[/\-](\d{2})[/\-](\d{4})$"
+    matches_mask = col.str.contains(dd_mm_yyyy_pattern)
+    converted_count = int(matches_mask.sum())
+
+    if converted_count == 0:
+        return {
+            "dataset_id": dataset_id,
+            "converted_count": 0,
+            "message": "No dates in dd/mm/yyyy format were found. No changes made."
+        }
+
+    # Replace: dd/mm/yyyy → yyyy-mm-dd
+    new_col = col.str.replace(
+        r"^(\d{2})[/\-](\d{2})[/\-](\d{4})$",
+        r"${3}-${2}-${1}"
+    )
+
+    df = df.with_columns(new_col.alias("transaction_date"))
+    df.write_csv(file_path)
+
+    return {
+        "dataset_id": dataset_id,
+        "converted_count": converted_count,
+        "total_rows": len(df),
+        "message": f"Successfully converted {converted_count} dates from dd/mm/yyyy to yyyy-mm-dd."
+    }
 
 
 # ==========================================

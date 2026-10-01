@@ -72,6 +72,11 @@ export const loginUser = async (credentials) => {
   return response.data;
 };
 
+export const fixDateFormat = async (datasetId) => {
+  const response = await client.post(`/api/datasets/${datasetId}/fix-date-format`);
+  return response.data;
+};
+
 export const getCurrentUser = async (userId) => {
   const response = await client.get(`/api/auth/me/${userId}`);
   return response.data;
@@ -81,6 +86,7 @@ export default {
   registerUser,
   loginUser,
   getCurrentUser,
+  fixDateFormat,
   uploadDataset,
   getDataset,
   getDatasetPreview,

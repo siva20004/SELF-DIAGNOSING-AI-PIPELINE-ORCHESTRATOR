@@ -1,17 +1,20 @@
 import React, { useState } from 'react';
-import { ShieldCheck, ShieldX, Play, FileCode, CheckCircle, AlertTriangle, ArrowRight, Loader2 } from 'lucide-react';
-import { validateDataset } from '../services/api';
+import { ShieldCheck, ShieldX, Play, FileCode, CheckCircle, AlertTriangle, ArrowRight, Loader2, CalendarCog } from 'lucide-react';
+import { validateDataset, fixDateFormat } from '../services/api';
 import ValidationErrors from './ValidationErrors';
 
 export default function ValidationPanel({ dataset, onValidationComplete, disabled }) {
   const [validating, setValidating] = useState(false);
   const [validationResult, setValidationResult] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
+  const [fixingDate, setFixingDate] = useState(false);
+  const [dateFixResult, setDateFixResult] = useState(null);
 
   const handleValidate = async () => {
     if (!dataset?.dataset_id) return;
     setValidating(true);
     setErrorMsg(null);
+    setDateFixResult(null);
 
     try {
       const result = await validateDataset(dataset.dataset_id);
@@ -23,6 +26,25 @@ export default function ValidationPanel({ dataset, onValidationComplete, disable
       setErrorMsg(msg);
     } finally {
       setValidating(false);
+    }
+  };
+
+  const handleFixDateFormat = async () => {
+    if (!dataset?.dataset_id) return;
+    setFixingDate(true);
+    setDateFixResult(null);
+
+    try {
+      const result = await fixDateFormat(dataset.dataset_id);
+      setDateFixResult(result);
+      // Auto re-validate after fixing
+      setTimeout(() => handleValidate(), 800);
+    } catch (err) {
+      console.error(err);
+      const msg = err.response?.data?.detail || err.message || 'Date format fix failed';
+      setErrorMsg(msg);
+    } finally {
+      setFixingDate(false);
     }
   };
 
@@ -196,6 +218,68 @@ export default function ValidationPanel({ dataset, onValidationComplete, disable
                 <CheckCircle size={18} style={{ marginRight: '8px', flexShrink: 0 }} />
                 <div>
                   <strong>Data Contract Verification Passed:</strong> All {validationResult.rows_received.toLocaleString()} rows satisfy 100% of schema definitions, numeric ranges, enum restrictions, and arithmetic rules. Pipeline execution is now unlocked.
+                </div>
+              </div>
+            )}
+
+            {/* If Invalid, show Fix Date Format button if DATE_FORMAT_ERROR exists */}
+            {validationResult.status === 'INVALID' && 
+              validationResult.errors_preview?.some(e => e.error_type === 'DATE_FORMAT_ERROR') && (
+              <div className="date-fix-banner" style={{
+                marginTop: '16px',
+                padding: '14px 18px',
+                background: '#fffbeb',
+                border: '1px solid #fde68a',
+                borderRadius: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '12px',
+                flexWrap: 'wrap'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <CalendarCog size={20} style={{ color: '#d97706', flexShrink: 0 }} />
+                  <div>
+                    <strong style={{ color: '#92400e', fontSize: '13px' }}>Date Format Issue Detected</strong>
+                    <p style={{ color: '#a16207', fontSize: '12px', margin: '2px 0 0 0' }}>
+                      Dates are in <code style={{ background: '#fef3c7', padding: '1px 4px', borderRadius: '3px' }}>dd/mm/yyyy</code> format. 
+                      Click to convert to <code style={{ background: '#fef3c7', padding: '1px 4px', borderRadius: '3px' }}>yyyy-mm-dd</code> (ISO standard).
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleFixDateFormat}
+                  disabled={fixingDate}
+                  style={{ 
+                    whiteSpace: 'nowrap',
+                    background: '#d97706',
+                    fontSize: '12.5px',
+                    padding: '8px 16px'
+                  }}
+                >
+                  {fixingDate ? (
+                    <>
+                      <Loader2 size={14} className="spinner" style={{ marginRight: '6px' }} />
+                      Converting Dates...
+                    </>
+                  ) : (
+                    <>
+                      <CalendarCog size={14} style={{ marginRight: '6px' }} />
+                      Fix Date Format
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+
+            {/* Date Fix Success Message */}
+            {dateFixResult && dateFixResult.converted_count > 0 && (
+              <div className="alert alert-success" style={{ marginTop: '12px' }}>
+                <CheckCircle size={18} style={{ marginRight: '8px', flexShrink: 0 }} />
+                <div>
+                  <strong>Date Format Fixed:</strong> {dateFixResult.converted_count.toLocaleString()} dates converted from dd/mm/yyyy → yyyy-mm-dd. Re-validating dataset...
                 </div>
               </div>
             )}
