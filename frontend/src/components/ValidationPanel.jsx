@@ -242,8 +242,8 @@ export default function ValidationPanel({ dataset, onValidationComplete, disable
                   <div>
                     <strong style={{ color: '#92400e', fontSize: '13px' }}>Date Format Issue Detected</strong>
                     <p style={{ color: '#a16207', fontSize: '12px', margin: '2px 0 0 0' }}>
-                      Dates are in <code style={{ background: '#fef3c7', padding: '1px 4px', borderRadius: '3px' }}>dd/mm/yyyy</code> format. 
-                      Click to convert to <code style={{ background: '#fef3c7', padding: '1px 4px', borderRadius: '3px' }}>yyyy-mm-dd</code> (ISO standard).
+                      Dates are in non-standard format (e.g. <code style={{ background: '#fef3c7', padding: '1px 4px', borderRadius: '3px' }}>dd/mm/yyyy, mm/dd/yyyy</code>). 
+                      Click to convert all dates to <code style={{ background: '#fef3c7', padding: '1px 4px', borderRadius: '3px' }}>yyyy-mm-dd</code> (ISO standard).
                     </p>
                   </div>
                 </div>

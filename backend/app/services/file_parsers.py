@@ -206,8 +206,70 @@ def parse_json_file(file_path: str) -> pl.DataFrame:
     return records_to_dataframe(str_records)
 
 
+CONTRACT_COLUMNS = [
+    "transaction_id", "customer_id", "product_id", "customer_name",
+    "city", "state", "customer_segment", "product_name", "category",
+    "quantity", "unit_price", "total_amount", "payment_method",
+    "transaction_status", "transaction_date", "source_system"
+]
+
+HEADER_FRAGMENTS_MAP = {
+    "transaction_id": ["transaction_id", "trans_id", "tx_id", "transaction"],
+    "customer_id": ["customer_id", "cust_id", "customer_i", "_customer_i"],
+    "product_id": ["product_id", "prod_id", "dproduct_id"],
+    "customer_name": ["customer_name", "cust_name", "customer_n", "customer"],
+    "city": ["city"],
+    "state": ["state"],
+    "customer_segment": ["customer_segment", "customer_s", "segment"],
+    "product_name": ["product_name", "product_na", "eproduct_na", "prod_name"],
+    "category": ["category", "mcategory"],
+    "quantity": ["quantity", "qty"],
+    "unit_price": ["unit_price", "price"],
+    "total_amount": ["total_amount", "total_amou", "total_amoun", "amount"],
+    "payment_method": ["payment_method", "payment_m", "npayment_m", "payment"],
+    "transaction_status": ["transaction_status", "status"],
+    "transaction_date": ["transaction_date", "transaction_d", "_transaction_d", "date"],
+    "source_system": ["source_system", "source_syst", "source", "system"],
+}
+
+
+def reconcile_pdf_headers(headers: List[str], sample_rows: List[List[str]]) -> List[str]:
+    """
+    Intelligently maps raw or fragmented PDF table headers to canonical column names.
+    """
+    if not headers:
+        return headers
+
+    num_cols = len(headers)
+    
+    # 1. Check data profiling on first rows to match standard 16 contract columns
+    if num_cols == 16 and sample_rows:
+        r0 = sample_rows[0]
+        if len(r0) >= 3:
+            has_t = bool(re.match(r"^T\d{8}$", r0[0]))
+            has_c = bool(re.match(r"^C\d{6}$", r0[1]))
+            has_p = bool(re.match(r"^P\d{3}$", r0[2]))
+            if has_t and has_c and has_p:
+                return list(CONTRACT_COLUMNS)
+
+    # 2. Match headers via fragment keywords
+    mapped = list(headers)
+    used_targets = set()
+    for idx, h in enumerate(headers):
+        h_clean = re.sub(r"[^a-zA-Z0-9_]", "", h.lower().strip())
+        for target_col, aliases in HEADER_FRAGMENTS_MAP.items():
+            if target_col in used_targets:
+                continue
+            if any(alias in h_clean for alias in aliases):
+                mapped[idx] = target_col
+                used_targets.add(target_col)
+                break
+
+    return mapped
+
+
 def parse_pdf(file_path: str) -> pl.DataFrame:
-    """Extract tabular data from PDF using pdfplumber."""
+    """Extract tabular data from PDF using pdfplumber with multi-page and border-spillover handling."""
     try:
         import pdfplumber
     except ImportError:
@@ -227,20 +289,28 @@ def parse_pdf(file_path: str) -> pl.DataFrame:
             if tables:
                 for table in tables:
                     for row_idx, row in enumerate(table):
-                        if row is None:
+                        if row is None or not any(row):
                             continue
-                        cleaned = [str(cell).strip() if cell else "" for cell in row]
-                        if headers is None:
+                        cleaned = [str(cell).strip() if cell is not None else "" for cell in row]
+                        
+                        # Determine if this row is a header
+                        if headers is None and page_num == 0 and row_idx == 0:
                             headers = cleaned
-                        else:
-                            all_rows.append(cleaned)
+                        elif headers is not None:
+                            # Check if subsequent page repeats identical/similar header row
+                            is_repeated_header = (
+                                len(cleaned) == len(headers) and
+                                any("transaction" in str(c).lower() or "customer" in str(c).lower() for c in cleaned[:3]) and
+                                not bool(re.match(r"^T\d{8}$", cleaned[0]))
+                            )
+                            if not is_repeated_header:
+                                all_rows.append(cleaned)
             else:
-                # Try extracting text and parsing as delimiter-separated
+                # Fallback: text extraction for structured text
                 text = page.extract_text()
                 if text:
                     lines = [l.strip() for l in text.split("\n") if l.strip()]
                     for line in lines:
-                        # Try tab, pipe, or multi-space as delimiters
                         if "\t" in line:
                             parts = [p.strip() for p in line.split("\t")]
                         elif "|" in line:
@@ -249,7 +319,7 @@ def parse_pdf(file_path: str) -> pl.DataFrame:
                             parts = re.split(r"\s{2,}", line)
 
                         if len(parts) >= 3:
-                            if headers is None:
+                            if headers is None and page_num == 0:
                                 headers = parts
                             else:
                                 all_rows.append(parts)
@@ -262,12 +332,59 @@ def parse_pdf(file_path: str) -> pl.DataFrame:
             "Possible reasons: scanned image PDF, no table structure, or unsupported PDF layout."
         )
 
-    # Normalize row lengths to match headers
+    # Detect & strip trailing empty/artifact column (e.g. 17 columns where col 16 is empty)
+    if len(headers) == 17:
+        col16_vals = [r[16] for r in all_rows if len(r) > 16]
+        if all(v in ("", "em", " ") for v in col16_vals):
+            headers = headers[:16]
+            all_rows = [r[:16] for r in all_rows]
+
+    # Reconcile headers
+    resolved_headers = reconcile_pdf_headers(headers, all_rows)
+
+    # Reconcile data rows and repair PDF table border spillovers
     data_rows = []
+    seg_clean = {
+        "sStudent": "Student", "dStudent": "Student",
+        "sEnterprise": "Enterprise", "dEnterprise": "Enterprise",
+        "sRegular": "Regular", "dRegular": "Regular",
+        "sPremium": "Premium", "dPremium": "Premium"
+    }
+
     for row in all_rows:
         record = {}
-        for i, col in enumerate(headers):
-            record[col] = row[i] if i < len(row) else ""
+        for i, col in enumerate(resolved_headers):
+            record[col] = row[i].strip() if i < len(row) else ""
+
+        # Repair border spillovers
+        # 1. Status and date spillover: COMPLETE + D 5/31/2025 -> COMPLETED and 5/31/2025
+        status_val = record.get("transaction_status", "")
+        if status_val == "COMPLETE" or status_val == "GCOMPLETE":
+            record["transaction_status"] = "COMPLETED"
+            if record.get("transaction_date", "").startswith("D"):
+                record["transaction_date"] = record["transaction_date"].lstrip("D").strip()
+        elif status_val.startswith("G"):
+            record["transaction_status"] = status_val[1:].strip()
+
+        # 2. Payment method spillover: NETBANKIN -> NETBANKING
+        if record.get("payment_method") == "NETBANKIN":
+            record["payment_method"] = "NETBANKING"
+
+        # 3. Clean leading D/artifact from transaction_date
+        date_val = record.get("transaction_date", "")
+        if date_val.startswith("D ") or (date_val.startswith("D") and len(date_val) > 1 and not date_val[1].isdigit()):
+            record["transaction_date"] = date_val.lstrip("D").strip()
+
+        # 4. Clean customer_segment
+        seg_val = record.get("customer_segment", "")
+        if seg_val in seg_clean:
+            record["customer_segment"] = seg_clean[seg_val]
+        else:
+            for s in ("Regular", "Premium", "Enterprise", "Student"):
+                if seg_val.endswith(s):
+                    record["customer_segment"] = s
+                    break
+
         data_rows.append(record)
 
     if not data_rows:

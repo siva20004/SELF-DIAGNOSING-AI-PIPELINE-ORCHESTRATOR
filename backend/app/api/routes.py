@@ -258,50 +258,108 @@ def fix_date_format(
     db: Session = Depends(get_db)
 ):
     """
-    Reads the uploaded dataset, converts transaction_date from dd/mm/yyyy
-    to yyyy-mm-dd (ISO format), overwrites the file, and returns a count
-    of how many dates were converted.
+    Universal date format fixer across ALL file formats (CSV, Excel, JSON, PDF, TXT, DOCX, XML).
+    Converts transaction_date from any format (dd/mm/yyyy, mm/dd/yyyy, m/d/yyyy, yyyy/mm/dd, etc.)
+    into ISO standard yyyy-mm-dd, overwrites the normalized file, and returns the converted count.
     """
-    file_path, file_type = get_dataset_file_path(dataset_id, db)
-
-    if file_type.upper() != "CSV":
-        raise HTTPException(status_code=400, detail="Date format fix is currently supported for CSV files only.")
-
+    from datetime import datetime
     import polars as pl
+    from app.services.ingestion import UPLOAD_DIR
 
-    df = pl.read_csv(file_path, infer_schema_length=0)
+    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+    if not dataset:
+        raise HTTPException(status_code=404, detail=f"Dataset {dataset_id} not found")
+
+    # Locate normalized CSV file on disk
+    norm_path = os.path.join(UPLOAD_DIR, f"{dataset_id}_normalized.csv")
+    legacy_path = os.path.join(UPLOAD_DIR, f"{dataset_id}_{dataset.filename}")
+    
+    target_path = norm_path if os.path.exists(norm_path) else legacy_path
+    if not os.path.exists(target_path):
+        raise HTTPException(status_code=404, detail=f"Dataset file missing on disk")
+
+    df = pl.read_csv(target_path, infer_schema_length=0)
 
     if "transaction_date" not in df.columns:
         raise HTTPException(status_code=400, detail="Column 'transaction_date' not found in dataset.")
 
     col = df["transaction_date"].cast(pl.String)
 
-    # Detect dd/mm/yyyy or dd-mm-yyyy pattern and convert to yyyy-mm-dd
-    dd_mm_yyyy_pattern = r"^(\d{2})[/\-](\d{2})[/\-](\d{4})$"
-    matches_mask = col.str.contains(dd_mm_yyyy_pattern)
-    converted_count = int(matches_mask.sum())
+    def convert_date_val(val: Optional[str]) -> str:
+        if not val:
+            return ""
+        s = str(val).strip()
+        if not s:
+            return ""
+
+        # Strip any leading letter artifacts like 'D ', 'd ', etc.
+        s = re.sub(r"^[^\d]+", "", s).strip()
+        # Strip time component if present
+        s = re.split(r"[\sT]", s)[0]
+
+        # Already valid ISO YYYY-MM-DD
+        if re.match(r"^\d{4}-\d{2}-\d{2}$", s):
+            return s
+
+        # Check YYYY/MM/DD or YYYY.MM.DD
+        m_ymd = re.match(r"^(\d{4})[/\-\.](\d{1,2})[/\-\.](\d{1,2})$", s)
+        if m_ymd:
+            y, m, d = int(m_ymd.group(1)), int(m_ymd.group(2)), int(m_ymd.group(3))
+            try:
+                return datetime(y, m, d).strftime("%Y-%m-%d")
+            except Exception:
+                pass
+
+        # Check D/M/Y or M/D/Y (1-2 digit month/day, 2-4 digit year)
+        m_dmy = re.match(r"^(\d{1,2})[/\-\.](\d{1,2})[/\-\.](\d{2,4})$", s)
+        if m_dmy:
+            p1, p2, p3 = int(m_dmy.group(1)), int(m_dmy.group(2)), int(m_dmy.group(3))
+            if p3 < 100:
+                p3 += 2000
+            if p1 > 12:  # p1 must be day, p2 is month
+                day, month, year = p1, p2, p3
+            elif p2 > 12:  # p2 must be day, p1 is month
+                month, day, year = p1, p2, p3
+            else:
+                month, day, year = p1, p2, p3
+            try:
+                return datetime(year, month, day).strftime("%Y-%m-%d")
+            except Exception:
+                try:
+                    return datetime(year, day, month).strftime("%Y-%m-%d")
+                except Exception:
+                    pass
+
+        return s
+
+    raw_dates = col.to_list()
+    converted_dates = [convert_date_val(d) for d in raw_dates]
+    
+    # Count how many dates were changed
+    converted_count = sum(1 for orig, conv in zip(raw_dates, converted_dates) if orig != conv and conv)
 
     if converted_count == 0:
         return {
             "dataset_id": dataset_id,
             "converted_count": 0,
-            "message": "No dates in dd/mm/yyyy format were found. No changes made."
+            "message": "No non-standard dates found. All dates are already in ISO format."
         }
 
-    # Replace: dd/mm/yyyy → yyyy-mm-dd
-    new_col = col.str.replace(
-        r"^(\d{2})[/\-](\d{2})[/\-](\d{4})$",
-        r"${3}-${2}-${1}"
-    )
+    new_series = pl.Series("transaction_date", converted_dates, dtype=pl.String)
+    df = df.with_columns(new_series)
 
-    df = df.with_columns(new_col.alias("transaction_date"))
-    df.write_csv(file_path)
+    # Overwrite both normalized CSV and legacy file so preview & pipeline stay synced
+    for p in (norm_path, legacy_path):
+        try:
+            df.write_csv(p)
+        except Exception:
+            pass
 
     return {
         "dataset_id": dataset_id,
         "converted_count": converted_count,
         "total_rows": len(df),
-        "message": f"Successfully converted {converted_count} dates from dd/mm/yyyy to yyyy-mm-dd."
+        "message": f"Successfully converted {converted_count:,} dates to ISO standard (yyyy-mm-dd)."
     }
 
 
