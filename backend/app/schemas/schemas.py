@@ -13,6 +13,10 @@ class DatasetUploadResponse(BaseModel):
     rows: int
     columns: int
     status: str
+    available_sheets: Optional[List[str]] = None
+    selected_sheet: Optional[str] = None
+    extraction_notes: Optional[str] = None
+
 
 
 class DatasetPreviewResponse(BaseModel):

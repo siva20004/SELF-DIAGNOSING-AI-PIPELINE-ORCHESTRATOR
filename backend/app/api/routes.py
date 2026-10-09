@@ -2,7 +2,7 @@ import uuid
 import re
 import os
 from typing import List, Optional
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Query
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.database.session import get_db
@@ -32,13 +32,15 @@ router = APIRouter(prefix="/api", tags=["Pipeline Orchestrator"])
 @router.post("/datasets/upload", response_model=DatasetUploadResponse)
 async def upload_dataset(
     file: UploadFile = File(...),
+    sheet_name: Optional[str] = Form(None),
     db: Session = Depends(get_db)
 ):
     """
-    Receives actual file (CSV, JSON, Parquet), saves safely, reads metadata,
-    calculates exact row/column counts and file size, records in PostgreSQL.
+    Receives actual file (CSV, XLSX/XLS, JSON, PDF, TXT, DOCX, XML, Parquet),
+    saves safely, parses format, normalizes to tabular dataset, calculates
+    exact row/column counts and file size, and records in PostgreSQL.
     """
-    return await handle_file_upload(file, db)
+    return await handle_file_upload(file, db, sheet_name=sheet_name)
 
 
 @router.get("/datasets/{dataset_id}", response_model=DatasetUploadResponse)
@@ -59,6 +61,66 @@ def get_dataset(
         columns=dataset.columns_count,
         status=dataset.status
     )
+
+
+@router.post("/datasets/{dataset_id}/select-sheet", response_model=DatasetUploadResponse)
+def select_sheet(
+    dataset_id: str,
+    sheet_name: str = Query(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Re-normalizes an uploaded Excel workbook with a different selected sheet.
+    """
+    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+    if not dataset:
+        raise HTTPException(status_code=404, detail=f"Dataset {dataset_id} not found")
+
+    if dataset.file_type not in ("XLSX", "XLS"):
+        raise HTTPException(status_code=400, detail="Sheet selection is only applicable to Excel workbooks.")
+
+    from app.services.ingestion import UPLOAD_DIR
+    from app.services.file_parsers import parse_to_dataframe, get_excel_sheets
+
+    raw_path = os.path.join(UPLOAD_DIR, f"{dataset_id}_raw_{dataset.filename}")
+    if not os.path.exists(raw_path):
+        raise HTTPException(status_code=404, detail="Original Excel file is no longer available.")
+
+    try:
+        available_sheets = get_excel_sheets(raw_path)
+        if sheet_name not in available_sheets:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Sheet '{sheet_name}' not found. Available sheets: {', '.join(available_sheets)}"
+            )
+
+        df = parse_to_dataframe(raw_path, dataset.file_type, sheet_name=sheet_name)
+        norm_path = os.path.join(UPLOAD_DIR, f"{dataset_id}_normalized.csv")
+        df.write_csv(norm_path)
+
+        # Update dataset record
+        dataset.rows_count = len(df)
+        dataset.columns_count = len(df.columns)
+        db.commit()
+        db.refresh(dataset)
+
+        return DatasetUploadResponse(
+            dataset_id=dataset.id,
+            filename=dataset.filename,
+            file_type=dataset.file_type,
+            file_size_bytes=dataset.file_size_bytes,
+            rows=dataset.rows_count,
+            columns=dataset.columns_count,
+            status=dataset.status,
+            available_sheets=available_sheets,
+            selected_sheet=sheet_name,
+            extraction_notes=f"Loaded sheet '{sheet_name}' ({len(df):,} records, {len(df.columns)} columns)."
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to load sheet '{sheet_name}': {str(e)}")
+
 
 
 @router.get("/datasets/{dataset_id}/preview", response_model=DatasetPreviewResponse)

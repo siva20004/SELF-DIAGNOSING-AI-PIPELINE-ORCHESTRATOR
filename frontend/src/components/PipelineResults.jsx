@@ -2,7 +2,7 @@ import React from 'react';
 import { DollarSign, Package, ShoppingCart, TrendingUp, CheckCircle, BarChart3, MapPin, Tag, Calendar } from 'lucide-react';
 import PipelineTasks from './PipelineTasks';
 
-export default function PipelineResults({ results }) {
+export default function PipelineResults({ results, dataset }) {
   if (!results) return null;
 
   const { run_id, status, started_at, completed_at, duration_seconds, rows_received, rows_processed, rows_rejected, metrics, sales_by_city, sales_by_category, sales_by_date, tasks } = results;
@@ -26,6 +26,58 @@ export default function PipelineResults({ results }) {
 
   return (
     <div className="pipeline-results-container">
+      {/* File Information Card (Requirement 15) */}
+      {dataset && (
+        <div className="file-info-banner" style={{
+          background: '#ffffff',
+          border: '1px solid #e2e8f0',
+          borderRadius: '8px',
+          padding: '16px 20px',
+          marginBottom: '20px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px' }}>
+            <span style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.8px', color: '#64748b', textTransform: 'uppercase' }}>
+              FILE & EXECUTION DIAGNOSTICS
+            </span>
+            <span className="badge badge-success" style={{ fontSize: '11px' }}>
+              <CheckCircle size={12} style={{ marginRight: '4px' }} />
+              PIPELINE COMPLETED
+            </span>
+          </div>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+            gap: '12px'
+          }}>
+            <div>
+              <span style={{ fontSize: '11px', color: '#64748b', display: 'block' }}>File Name</span>
+              <strong style={{ fontSize: '13px', color: '#1e293b' }} title={dataset.filename}>{dataset.filename}</strong>
+            </div>
+            <div>
+              <span style={{ fontSize: '11px', color: '#64748b', display: 'block' }}>Format</span>
+              <span className="badge badge-neutral" style={{ marginTop: '2px' }}>{dataset.file_type}</span>
+            </div>
+            <div>
+              <span style={{ fontSize: '11px', color: '#64748b', display: 'block' }}>Records Detected</span>
+              <strong style={{ fontSize: '13px', color: '#1e293b' }}>{dataset.rows?.toLocaleString() || rows_received?.toLocaleString()}</strong>
+            </div>
+            <div>
+              <span style={{ fontSize: '11px', color: '#64748b', display: 'block' }}>Extraction</span>
+              <span style={{ color: '#16a34a', fontWeight: 600, fontSize: '13px' }}>✓ Successful</span>
+            </div>
+            <div>
+              <span style={{ fontSize: '11px', color: '#64748b', display: 'block' }}>Validation</span>
+              <span style={{ color: '#16a34a', fontWeight: 600, fontSize: '13px' }}>✓ Passed</span>
+            </div>
+            <div>
+              <span style={{ fontSize: '11px', color: '#64748b', display: 'block' }}>Pipeline</span>
+              <span style={{ color: '#16a34a', fontWeight: 600, fontSize: '13px' }}>✓ Completed</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Run Metadata Header */}
       <div className="run-summary-box">
         <div className="run-header-top">

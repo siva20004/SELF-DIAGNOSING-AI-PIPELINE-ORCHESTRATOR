@@ -115,7 +115,7 @@ export default function PipelineExecution({ dataset, validationResult, disabled 
 
         {/* Audited Results Section */}
         {pipelineResultsData && (
-          <PipelineResults results={pipelineResultsData} />
+          <PipelineResults results={pipelineResultsData} dataset={dataset} />
         )}
       </div>
     </div>

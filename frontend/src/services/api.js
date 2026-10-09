@@ -7,13 +7,23 @@ const client = axios.create({
   timeout: 120000, // 2 minutes for processing large 1M records
 });
 
-export const uploadDataset = async (file) => {
+export const uploadDataset = async (file, sheetName = null) => {
   const formData = new FormData();
   formData.append('file', file);
+  if (sheetName) {
+    formData.append('sheet_name', sheetName);
+  }
   const response = await client.post('/api/datasets/upload', formData, {
     headers: {
       'Content-Type': 'multipart/form-data',
     },
+  });
+  return response.data;
+};
+
+export const selectExcelSheet = async (datasetId, sheetName) => {
+  const response = await client.post(`/api/datasets/${datasetId}/select-sheet`, null, {
+    params: { sheet_name: sheetName },
   });
   return response.data;
 };
@@ -88,6 +98,7 @@ export default {
   getCurrentUser,
   fixDateFormat,
   uploadDataset,
+  selectExcelSheet,
   getDataset,
   getDatasetPreview,
   validateDataset,
