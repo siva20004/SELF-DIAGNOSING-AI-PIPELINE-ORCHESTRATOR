@@ -44,13 +44,19 @@ class PipelineRun(Base):
     rows_valid = Column(BigInteger, default=0)
     rows_invalid = Column(BigInteger, default=0)
     rows_processed = Column(BigInteger, default=0)
-    rows_rejected = Column(BigInteger, default=0)
     error_message = Column(Text, nullable=True)
+    file_format = Column(String(32), default="CSV", nullable=False)
+    dataset_fingerprint = Column(String(128), nullable=True)
+    config_json = Column(Text, nullable=True)
+    artifact_path = Column(String(255), nullable=True)
 
     dataset = relationship("Dataset", back_populates="runs")
     tasks = relationship("PipelineTask", back_populates="run", cascade="all, delete-orphan")
     transactions = relationship("ProcessedTransaction", back_populates="run", cascade="all, delete-orphan")
     aggregates = relationship("SalesAggregate", back_populates="run", cascade="all, delete-orphan")
+    diagnoses = relationship("FailureDiagnosisRecord", back_populates="run", cascade="all, delete-orphan")
+    backfill_plans = relationship("BackfillPlanRecord", back_populates="run", cascade="all, delete-orphan")
+
 
 
 class PipelineTask(Base):
@@ -132,4 +138,101 @@ class User(Base):
     email = Column(String(255), unique=True, index=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now(), nullable=False)
+
+
+class FailureDiagnosisRecord(Base):
+    __tablename__ = "failure_diagnoses"
+
+    failure_id = Column(String(64), primary_key=True, index=True)
+    run_id = Column(String(64), ForeignKey("pipeline_runs.run_id", ondelete="CASCADE"), nullable=False, index=True)
+    failed_task_name = Column(String(64), nullable=True)
+    failure_category = Column(String(64), nullable=False)  # Schema violation, Missing required columns, Invalid values, Upstream failure, etc.
+    error_message = Column(Text, nullable=True)
+    ranked_causes_json = Column(Text, nullable=False)  # JSON list of {cause, confidence, evidence, model_version}
+    evidence_json = Column(Text, nullable=False)  # JSON list of evidence items & violations
+    diagnosis_method = Column(String(64), nullable=False, default="rule_based_baseline")
+    model_version = Column(String(32), nullable=False, default="1.0")
+    suggested_action = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    run = relationship("PipelineRun", back_populates="diagnoses")
+
+
+class BackfillPlanRecord(Base):
+    __tablename__ = "backfill_plans"
+
+    plan_id = Column(String(64), primary_key=True, index=True)
+    failure_id = Column(String(64), nullable=False, index=True)
+    run_id = Column(String(64), ForeignKey("pipeline_runs.run_id", ondelete="CASCADE"), nullable=False, index=True)
+    failed_task = Column(String(64), nullable=False)
+    affected_partitions_json = Column(Text, nullable=False)  # JSON list of affected partitions/dates/cities
+    selected_tasks_json = Column(Text, nullable=False)  # Minimal safe set of tasks to rerun
+    execution_order_json = Column(Text, nullable=False)  # Ordered execution steps
+    estimated_runtime_seconds = Column(Numeric(10, 2), nullable=False, default=0.0)
+    estimated_cost_usd = Column(Numeric(12, 6), nullable=False, default=0.0)
+    rationale = Column(Text, nullable=True)
+    status = Column(String(32), nullable=False, default="PENDING_APPROVAL")  # PENDING_APPROVAL, APPROVED, REJECTED, EXECUTED
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    run = relationship("PipelineRun", back_populates="backfill_plans")
+    schedules = relationship("ScheduleRecord", back_populates="plan", cascade="all, delete-orphan")
+
+
+class ScheduleRecord(Base):
+    __tablename__ = "backfill_schedules"
+
+    schedule_id = Column(String(64), primary_key=True, index=True)
+    plan_id = Column(String(64), ForeignKey("backfill_plans.plan_id", ondelete="CASCADE"), nullable=False, index=True)
+    run_id = Column(String(64), nullable=False, index=True)
+    resource_profile = Column(String(64), nullable=False)  # Economy, Standard, Performance
+    estimated_runtime_seconds = Column(Numeric(10, 2), nullable=False)
+    estimated_cost_usd = Column(Numeric(12, 6), nullable=False)
+    budget_limit_usd = Column(Numeric(10, 4), nullable=True)
+    deadline_seconds = Column(Numeric(10, 2), nullable=True)
+    optimization_objective = Column(String(64), nullable=False, default="minimize_cost")
+    baseline_comparison_json = Column(Text, nullable=True)
+    selection_rationale = Column(Text, nullable=True)
+    status = Column(String(32), nullable=False, default="SCHEDULED")  # SCHEDULED, APPROVED, EXECUTED
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    plan = relationship("BackfillPlanRecord", back_populates="schedules")
+    recoveries = relationship("RecoveryRunRecord", back_populates="schedule", cascade="all, delete-orphan")
+
+
+class RecoveryRunRecord(Base):
+    __tablename__ = "recovery_runs"
+
+    recovery_id = Column(String(64), primary_key=True, index=True)
+    plan_id = Column(String(64), nullable=False, index=True)
+    schedule_id = Column(String(64), ForeignKey("backfill_schedules.schedule_id", ondelete="SET NULL"), nullable=True, index=True)
+    original_run_id = Column(String(64), nullable=False, index=True)
+    new_run_id = Column(String(64), nullable=True)
+    status = Column(String(32), nullable=False, default="PENDING")  # PENDING, RUNNING, SUCCEEDED, FAILED
+    current_task = Column(String(64), nullable=True)
+    retry_count = Column(Integer, default=0)
+    max_retries = Column(Integer, default=3)
+    started_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    completed_at = Column(DateTime, nullable=True)
+    duration_seconds = Column(Numeric(10, 2), nullable=True)
+    contract_validation_status = Column(String(32), nullable=True)
+    output_validation_status = Column(String(32), nullable=True)
+    task_states_json = Column(Text, nullable=True)
+    logs_text = Column(Text, nullable=True)
+    error_message = Column(Text, nullable=True)
+
+    schedule = relationship("ScheduleRecord", back_populates="recoveries")
+
+
+class ExperimentRecord(Base):
+    __tablename__ = "benchmark_experiments"
+
+    experiment_id = Column(String(64), primary_key=True, index=True)
+    experiment_type = Column(String(64), nullable=False)  # diagnosis_accuracy, backfill_efficiency, scheduling_cost, recovery_resilience
+    name = Column(String(128), nullable=False)
+    config_json = Column(Text, nullable=False)
+    baseline_metrics_json = Column(Text, nullable=False)
+    proposed_metrics_json = Column(Text, nullable=False)
+    raw_csv_path = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
 

@@ -6,6 +6,11 @@ from app.models.models import (
     ProcessedTransaction,
     SalesAggregate,
     User,
+    FailureDiagnosisRecord,
+    BackfillPlanRecord,
+    ScheduleRecord,
+    RecoveryRunRecord,
+    ExperimentRecord,
 )
 
 __all__ = [
@@ -16,4 +21,9 @@ __all__ = [
     "ProcessedTransaction",
     "SalesAggregate",
     "User",
+    "FailureDiagnosisRecord",
+    "BackfillPlanRecord",
+    "ScheduleRecord",
+    "RecoveryRunRecord",
+    "ExperimentRecord",
 ]

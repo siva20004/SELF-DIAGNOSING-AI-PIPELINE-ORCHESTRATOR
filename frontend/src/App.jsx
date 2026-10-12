@@ -1,8 +1,12 @@
 import React, { useState } from 'react';
-import { Database, ShieldCheck, PlayCircle, RefreshCw, Layers, CheckCircle2, User, LogOut, Globe } from 'lucide-react';
+import { Database, ShieldCheck, PlayCircle, RefreshCw, Layers, CheckCircle2, User, LogOut, Globe, History, AlertOctagon, BarChart3 } from 'lucide-react';
 import DatasetUpload from './components/DatasetUpload';
 import ValidationPanel from './components/ValidationPanel';
 import PipelineExecution from './components/PipelineExecution';
+import RunHistory from './components/RunHistory';
+import FailureDiagnosis from './components/FailureDiagnosis';
+import BackfillAndRecovery from './components/BackfillAndRecovery';
+import MonitoringAndExperiments from './components/MonitoringAndExperiments';
 import AuthCard from './components/AuthCard';
 import './App.css';
 
@@ -15,6 +19,10 @@ export default function App() {
       return null;
     }
   });
+
+  const [activeTab, setActiveTab] = useState('pipeline'); // 'pipeline' | 'history' | 'diagnosis' | 'backfill' | 'monitoring'
+  const [selectedRunIdForDiagnosis, setSelectedRunIdForDiagnosis] = useState(null);
+  const [selectedFailureIdForBackfill, setSelectedFailureIdForBackfill] = useState(null);
 
   const [dataset, setDataset] = useState(null);
   const [validationResult, setValidationResult] = useState(null);
@@ -47,6 +55,20 @@ export default function App() {
   const handleReset = () => {
     setDataset(null);
     setValidationResult(null);
+  };
+
+  const handleSelectRunForDiagnosis = (runId) => {
+    setSelectedRunIdForDiagnosis(runId);
+    setActiveTab('diagnosis');
+  };
+
+  const handleProceedToBackfill = (failureId) => {
+    setSelectedFailureIdForBackfill(failureId);
+    setActiveTab('backfill');
+  };
+
+  const handleNavigateToHistory = () => {
+    setActiveTab('history');
   };
 
   const isStep1Complete = !!dataset;
@@ -146,63 +168,149 @@ export default function App() {
         </div>
       </header>
 
+      {/* Platform Navigation Tabs (Phases 1-10) */}
+      <nav className="main-nav-bar">
+        <div className="main-nav-container">
+          <button
+            type="button"
+            className={`main-nav-tab ${activeTab === 'pipeline' ? 'active' : ''}`}
+            onClick={() => setActiveTab('pipeline')}
+          >
+            <PlayCircle size={15} />
+            Pipeline Ingestion (Steps 1–3)
+          </button>
+
+          <button
+            type="button"
+            className={`main-nav-tab ${activeTab === 'history' ? 'active' : ''}`}
+            onClick={() => setActiveTab('history')}
+          >
+            <History size={15} />
+            Run History
+            <span className="nav-tab-badge">Phase 5</span>
+          </button>
+
+          <button
+            type="button"
+            className={`main-nav-tab ${activeTab === 'diagnosis' ? 'active' : ''}`}
+            onClick={() => setActiveTab('diagnosis')}
+          >
+            <AlertOctagon size={15} />
+            AI Root Cause Diagnosis
+            <span className="nav-tab-badge">Phase 6</span>
+          </button>
+
+          <button
+            type="button"
+            className={`main-nav-tab ${activeTab === 'backfill' ? 'active' : ''}`}
+            onClick={() => setActiveTab('backfill')}
+          >
+            <Layers size={15} />
+            Backfill & Recovery
+            <span className="nav-tab-badge">Phases 7–9</span>
+          </button>
+
+          <button
+            type="button"
+            className={`main-nav-tab ${activeTab === 'monitoring' ? 'active' : ''}`}
+            onClick={() => setActiveTab('monitoring')}
+          >
+            <BarChart3 size={15} />
+            Monitoring & Experiments
+            <span className="nav-tab-badge">Phase 10</span>
+          </button>
+        </div>
+      </nav>
 
       {/* Main Workflow Body */}
       <main className="main-content">
-        {/* Step Indicator Progress Bar */}
-        <div className="stepper-bar">
-          <div className={`step-node ${isStep1Complete ? 'step-done' : 'step-active'}`}>
-            <div className="step-circle">
-              {isStep1Complete ? <CheckCircle2 size={16} /> : '1'}
+        {/* TAB 1: PIPELINE INGESTION & EXECUTION (PHASES 1-4) */}
+        {activeTab === 'pipeline' && (
+          <>
+            {/* Step Indicator Progress Bar */}
+            <div className="stepper-bar">
+              <div className={`step-node ${isStep1Complete ? 'step-done' : 'step-active'}`}>
+                <div className="step-circle">
+                  {isStep1Complete ? <CheckCircle2 size={16} /> : '1'}
+                </div>
+                <div className="step-meta">
+                  <span className="step-caption">Step 1</span>
+                  <span className="step-heading">Dataset Upload</span>
+                </div>
+              </div>
+
+              <div className={`step-connector ${isStep1Complete ? 'connector-done' : ''}`} />
+
+              <div className={`step-node ${!dataset ? 'step-locked' : isStep2Complete ? 'step-done' : 'step-active'}`}>
+                <div className="step-circle">
+                  {isStep2Complete ? <CheckCircle2 size={16} /> : '2'}
+                </div>
+                <div className="step-meta">
+                  <span className="step-caption">Step 2</span>
+                  <span className="step-heading">Contract Validation</span>
+                </div>
+              </div>
+
+              <div className={`step-connector ${isStep2Complete ? 'connector-done' : ''}`} />
+
+              <div className={`step-node ${!isStep2Complete ? 'step-locked' : 'step-active'}`}>
+                <div className="step-circle">3</div>
+                <div className="step-meta">
+                  <span className="step-caption">Step 3</span>
+                  <span className="step-heading">Execution & Results</span>
+                </div>
+              </div>
             </div>
-            <div className="step-meta">
-              <span className="step-caption">Step 1</span>
-              <span className="step-heading">Dataset Upload</span>
-            </div>
-          </div>
 
-          <div className={`step-connector ${isStep1Complete ? 'connector-done' : ''}`} />
+            {/* SECTION 1: DATASET UPLOAD */}
+            <DatasetUpload
+              onDatasetUploaded={handleDatasetUploaded}
+              disabled={false}
+            />
 
-          <div className={`step-node ${!dataset ? 'step-locked' : isStep2Complete ? 'step-done' : 'step-active'}`}>
-            <div className="step-circle">
-              {isStep2Complete ? <CheckCircle2 size={16} /> : '2'}
-            </div>
-            <div className="step-meta">
-              <span className="step-caption">Step 2</span>
-              <span className="step-heading">Contract Validation</span>
-            </div>
-          </div>
+            {/* SECTION 2: DATA CONTRACT VALIDATION */}
+            <ValidationPanel
+              dataset={dataset}
+              onValidationComplete={handleValidationComplete}
+              disabled={!dataset}
+            />
 
-          <div className={`step-connector ${isStep2Complete ? 'connector-done' : ''}`} />
+            {/* SECTION 3: PIPELINE EXECUTION & RESULTS */}
+            <PipelineExecution
+              dataset={dataset}
+              validationResult={validationResult}
+              disabled={!dataset || validationResult?.status !== 'VALID'}
+              onNavigateToDiagnosis={handleSelectRunForDiagnosis}
+              onNavigateToHistory={handleNavigateToHistory}
+            />
+          </>
+        )}
 
-          <div className={`step-node ${!isStep2Complete ? 'step-locked' : 'step-active'}`}>
-            <div className="step-circle">3</div>
-            <div className="step-meta">
-              <span className="step-caption">Step 3</span>
-              <span className="step-heading">Execution & Results</span>
-            </div>
-          </div>
-        </div>
+        {/* TAB 2: RUN HISTORY (PHASE 5) */}
+        {activeTab === 'history' && (
+          <RunHistory onSelectRunForDiagnosis={handleSelectRunForDiagnosis} />
+        )}
 
-        {/* SECTION 1: DATASET UPLOAD */}
-        <DatasetUpload
-          onDatasetUploaded={handleDatasetUploaded}
-          disabled={false}
-        />
+        {/* TAB 3: FAILURE DETECTION & AI DIAGNOSIS (PHASE 6) */}
+        {activeTab === 'diagnosis' && (
+          <FailureDiagnosis
+            runId={selectedRunIdForDiagnosis}
+            onProceedToBackfill={handleProceedToBackfill}
+          />
+        )}
 
-        {/* SECTION 2: DATA CONTRACT VALIDATION */}
-        <ValidationPanel
-          dataset={dataset}
-          onValidationComplete={handleValidationComplete}
-          disabled={!dataset}
-        />
+        {/* TAB 4: BACKFILL PLANNING & RECOVERY (PHASES 7-9) */}
+        {activeTab === 'backfill' && (
+          <BackfillAndRecovery
+            failureId={selectedFailureIdForBackfill}
+            onCompleteRecovery={() => setActiveTab('history')}
+          />
+        )}
 
-        {/* SECTION 3: PIPELINE EXECUTION & RESULTS */}
-        <PipelineExecution
-          dataset={dataset}
-          validationResult={validationResult}
-          disabled={!dataset || validationResult?.status !== 'VALID'}
-        />
+        {/* TAB 5: MONITORING & EXPERIMENTS (PHASE 10) */}
+        {activeTab === 'monitoring' && (
+          <MonitoringAndExperiments />
+        )}
       </main>
 
       {/* Enterprise Footer */}

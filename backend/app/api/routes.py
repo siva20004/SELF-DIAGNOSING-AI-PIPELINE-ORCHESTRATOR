@@ -6,7 +6,17 @@ from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, Q
 from sqlalchemy.orm import Session
 
 from app.database.session import get_db
-from app.models.models import Dataset, PipelineRun, PipelineTask, ValidationErrorRecord
+from app.models.models import (
+    Dataset,
+    PipelineRun,
+    PipelineTask,
+    ValidationErrorRecord,
+    FailureDiagnosisRecord,
+    BackfillPlanRecord,
+    ScheduleRecord,
+    RecoveryRunRecord,
+    ExperimentRecord,
+)
 from app.schemas.schemas import (
     DatasetUploadResponse,
     DatasetPreviewResponse,
@@ -19,12 +29,28 @@ from app.schemas.schemas import (
     UserLoginRequest,
     UserResponse,
     AuthResponse,
+    RunHistoryResponse,
+    RunArtifactsResponse,
+    RunLogsResponse,
+    FailureDiagnosisResponse,
+    BackfillPlanResponse,
+    ScheduleResponse,
+    RecoveryRunResponse,
+    MonitoringDashboardResponse,
+    ExperimentRunRequest,
+    ExperimentResponse,
 )
 from app.services.ingestion import handle_file_upload, get_dataset_preview, get_dataset_file_path
 from app.services.contract_loader import load_contract
 from app.services.validator import validate_dataset
 from app.services.pipeline_executor import execute_pipeline, get_pipeline_results
 from app.services.auth import register_user, login_user, get_user_by_id
+from app.services.run_history import get_all_runs, get_run_artifacts, get_run_logs
+from app.services.diagnosis_engine import create_or_get_failure_diagnosis
+from app.services.backfill_planner import create_backfill_plan, approve_backfill_plan
+from app.services.scheduler import compute_cost_aware_schedule, approve_schedule
+from app.services.recovery_executor import execute_recovery
+from app.services.monitoring_experiments import get_monitoring_dashboard, run_reproducible_experiment, EXPERIMENTS_DIR
 
 router = APIRouter(prefix="/api", tags=["Pipeline Orchestrator"])
 
@@ -392,4 +418,276 @@ def get_user_profile(
 ):
     """Fetches user profile by ID."""
     return get_user_by_id(db, user_id)
+
+
+# ==========================================
+# PHASE 5: RUN HISTORY & ARTIFACTS ENDPOINTS
+# ==========================================
+
+@router.get("/runs", response_model=RunHistoryResponse)
+def list_runs(
+    limit: int = 50,
+    offset: int = 0,
+    db: Session = Depends(get_db)
+):
+    """Retrieves persistent run history across restarts."""
+    return get_all_runs(db, limit=limit, offset=offset)
+
+
+@router.get("/runs/{run_id}/artifacts", response_model=RunArtifactsResponse)
+def get_artifacts(
+    run_id: str,
+    db: Session = Depends(get_db)
+):
+    """Fetches durable execution artifacts, dataset fingerprint, and outputs for a run."""
+    return get_run_artifacts(run_id, db)
+
+
+@router.get("/runs/{run_id}/logs", response_model=RunLogsResponse)
+def get_logs(
+    run_id: str,
+    db: Session = Depends(get_db)
+):
+    """Fetches complete task-by-task execution logs and telemetry for a run."""
+    return get_run_logs(run_id, db)
+
+
+# ==========================================
+# PHASE 6: FAILURE DETECTION & AI DIAGNOSIS
+# ==========================================
+
+@router.post("/runs/{run_id}/diagnose", response_model=FailureDiagnosisResponse)
+def diagnose_run(
+    run_id: str,
+    use_ai: bool = Query(True, description="Whether to use the calibrated AI classifier (True) or baseline rules (False)"),
+    db: Session = Depends(get_db)
+):
+    """
+    Performs root cause failure diagnosis for a pipeline run.
+    Identifies the first failing task and ranks probable causes with calibrated confidence.
+    """
+    return create_or_get_failure_diagnosis(run_id, db, use_ai=use_ai)
+
+
+@router.get("/runs/{run_id}/diagnosis", response_model=Optional[FailureDiagnosisResponse])
+def get_run_diagnosis(
+    run_id: str,
+    db: Session = Depends(get_db)
+):
+    """Retrieves an existing failure diagnosis for a pipeline run."""
+    record = db.query(FailureDiagnosisRecord).filter(FailureDiagnosisRecord.run_id == run_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail=f"No diagnosis found for run {run_id}")
+    
+    import json
+    ranked = json.loads(record.ranked_causes_json) if record.ranked_causes_json else []
+    evidence = json.loads(record.evidence_json) if record.evidence_json else []
+    
+    from app.schemas.schemas import RankedCauseItem
+    return FailureDiagnosisResponse(
+        failure_id=record.failure_id,
+        run_id=record.run_id,
+        failed_task_name=record.failed_task_name,
+        failure_category=record.failure_category,
+        error_message=record.error_message,
+        ranked_causes=[RankedCauseItem(**c) for c in ranked],
+        evidence=evidence,
+        diagnosis_method=record.diagnosis_method,
+        model_version=record.model_version,
+        suggested_action=record.suggested_action,
+        created_at=record.created_at,
+    )
+
+
+# ==========================================
+# PHASE 7: BACKFILL PLANNING ENDPOINTS
+# ==========================================
+
+@router.post("/failures/{failure_id}/plan-backfill", response_model=BackfillPlanResponse)
+def plan_backfill(
+    failure_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Generates a backfill plan calculating minimal safe set of tasks and affected partitions.
+    Status starts in PENDING_APPROVAL.
+    """
+    return create_backfill_plan(failure_id, db)
+
+
+@router.post("/backfills/{plan_id}/approve", response_model=BackfillPlanResponse)
+def approve_backfill(
+    plan_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Explicit user approval gate for executing a backfill plan.
+    Transitions status to APPROVED.
+    """
+    return approve_backfill_plan(plan_id, db)
+
+
+@router.get("/backfills/{plan_id}", response_model=BackfillPlanResponse)
+def get_backfill_plan(
+    plan_id: str,
+    db: Session = Depends(get_db)
+):
+    """Retrieves details of a backfill plan."""
+    plan = db.query(BackfillPlanRecord).filter(BackfillPlanRecord.plan_id == plan_id).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail=f"Backfill plan {plan_id} not found")
+    
+    import json
+    return BackfillPlanResponse(
+        plan_id=plan.plan_id,
+        failure_id=plan.failure_id,
+        run_id=plan.run_id,
+        failed_task=plan.failed_task,
+        affected_partitions=json.loads(plan.affected_partitions_json) if plan.affected_partitions_json else [],
+        selected_tasks=json.loads(plan.selected_tasks_json) if plan.selected_tasks_json else [],
+        execution_order=json.loads(plan.execution_order_json) if plan.execution_order_json else [],
+        estimated_runtime_seconds=plan.estimated_runtime_seconds,
+        estimated_cost_usd=plan.estimated_cost_usd,
+        rationale=plan.rationale,
+        status=plan.status,
+        created_at=plan.created_at,
+    )
+
+
+# ==========================================
+# PHASE 8: COST-AWARE SCHEDULING ENDPOINTS
+# ==========================================
+
+@router.post("/backfills/{plan_id}/schedule", response_model=ScheduleResponse)
+def schedule_backfill(
+    plan_id: str,
+    objective: str = Query("minimize_cost", description="minimize_cost, minimize_time, or balanced"),
+    budget_limit_usd: Optional[float] = Query(None),
+    deadline_seconds: Optional[float] = Query(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Schedules an approved backfill plan with optimal resource profiles and compares with FIFO baseline.
+    """
+    return compute_cost_aware_schedule(
+        plan_id=plan_id,
+        db=db,
+        objective=objective,
+        budget_limit_usd=budget_limit_usd,
+        deadline_seconds=deadline_seconds,
+    )
+
+
+@router.post("/schedules/{schedule_id}/approve", response_model=ScheduleResponse)
+def approve_sched(
+    schedule_id: str,
+    db: Session = Depends(get_db)
+):
+    """Explicit user approval gate for a schedule."""
+    return approve_schedule(schedule_id, db)
+
+
+# ==========================================
+# PHASE 9: RECOVERY EXECUTION ENDPOINTS
+# ==========================================
+
+@router.post("/backfills/{plan_id}/recover", response_model=RecoveryRunResponse)
+def start_recovery(
+    plan_id: str,
+    schedule_id: Optional[str] = Query(None),
+    max_retries: int = Query(3),
+    db: Session = Depends(get_db)
+):
+    """
+    Executes controlled recovery. Enforces plan approval check before running.
+    Tracks state transitions and performs contract & output quality validation.
+    """
+    return execute_recovery(
+        plan_id=plan_id,
+        db=db,
+        schedule_id=schedule_id,
+        max_retries=max_retries,
+    )
+
+
+@router.get("/recoveries/{recovery_id}", response_model=RecoveryRunResponse)
+def get_recovery_status(
+    recovery_id: str,
+    db: Session = Depends(get_db)
+):
+    """Retrieves recovery execution progress and state."""
+    rec = db.query(RecoveryRunRecord).filter(RecoveryRunRecord.recovery_id == recovery_id).first()
+    if not rec:
+        raise HTTPException(status_code=404, detail=f"Recovery run {recovery_id} not found")
+    
+    import json
+    return RecoveryRunResponse(
+        recovery_id=rec.recovery_id,
+        plan_id=rec.plan_id,
+        schedule_id=rec.schedule_id,
+        original_run_id=rec.original_run_id,
+        new_run_id=rec.new_run_id,
+        status=rec.status,
+        current_task=rec.current_task,
+        retry_count=rec.retry_count,
+        max_retries=rec.max_retries,
+        started_at=rec.started_at,
+        completed_at=rec.completed_at,
+        duration_seconds=rec.duration_seconds,
+        contract_validation_status=rec.contract_validation_status,
+        output_validation_status=rec.output_validation_status,
+        task_states=json.loads(rec.task_states_json) if rec.task_states_json else {},
+        logs_text=rec.logs_text,
+        error_message=rec.error_message,
+    )
+
+
+# ==========================================
+# PHASE 10: MONITORING & EXPERIMENTS ENDPOINTS
+# ==========================================
+
+@router.get("/monitoring/dashboard", response_model=MonitoringDashboardResponse)
+def monitoring_dashboard(
+    db: Session = Depends(get_db)
+):
+    """Returns operational KPIs aggregated directly from actual database runs."""
+    return get_monitoring_dashboard(db)
+
+
+@router.post("/experiments/run", response_model=ExperimentResponse)
+def run_experiment(
+    req: ExperimentRunRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Executes reproducible benchmark experiment:
+    - diagnosis_accuracy (Experiment A)
+    - backfill_efficiency (Experiment B)
+    - scheduling_cost (Experiment C)
+    - recovery_resilience (Experiment D)
+    """
+    return run_reproducible_experiment(
+        experiment_type=req.experiment_type,
+        config=req.config,
+        db=db
+    )
+
+
+@router.get("/experiments/{experiment_id}/csv")
+def download_experiment_csv(
+    experiment_id: str,
+    db: Session = Depends(get_db)
+):
+    """Downloads raw CSV metrics artifact for an experiment."""
+    from fastapi.responses import FileResponse
+    exp = db.query(ExperimentRecord).filter(ExperimentRecord.experiment_id == experiment_id).first()
+    if not exp or not exp.raw_csv_path or not os.path.exists(exp.raw_csv_path):
+        raise HTTPException(status_code=404, detail=f"Experiment CSV artifact for {experiment_id} not found")
+    
+    return FileResponse(
+        path=exp.raw_csv_path,
+        media_type="text/csv",
+        filename=os.path.basename(exp.raw_csv_path)
+    )
+
 

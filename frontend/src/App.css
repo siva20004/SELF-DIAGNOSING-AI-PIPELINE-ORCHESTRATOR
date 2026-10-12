@@ -1499,3 +1499,62 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* Platform Main Navigation Tabs (Phases 1-10) */
+.main-nav-bar {
+  background-color: var(--navy-800);
+  border-bottom: 1px solid var(--navy-700);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+}
+
+.main-nav-container {
+  max-width: 1280px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  overflow-x: auto;
+  gap: 4px;
+  padding: 0 16px;
+}
+
+.main-nav-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.main-nav-tab:hover {
+  color: #e2e8f0;
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+.main-nav-tab.active {
+  color: #38bdf8;
+  border-bottom-color: #38bdf8;
+  background-color: rgba(56, 189, 248, 0.08);
+}
+
+.nav-tab-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #cbd5e1;
+  font-weight: 700;
+}
+
+.main-nav-tab.active .nav-tab-badge {
+  background-color: rgba(56, 189, 248, 0.25);
+  color: #bae6fd;
+}
+
+

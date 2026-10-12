@@ -58,13 +58,5 @@ def get_db():
 
 
 def init_db():
-    from app.models.models import (
-        Dataset,
-        PipelineRun,
-        PipelineTask,
-        ValidationErrorRecord,
-        ProcessedTransaction,
-        SalesAggregate,
-        User,
-    )
+    import app.models  # noqa: F401
     Base.metadata.create_all(bind=engine)

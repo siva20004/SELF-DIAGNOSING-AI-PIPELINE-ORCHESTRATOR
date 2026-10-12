@@ -170,3 +170,193 @@ class AuthResponse(BaseModel):
     token: str
     user: UserResponse
 
+
+# ==========================================
+# PHASE 5: RUN HISTORY & PERSISTENCE SCHEMAS
+# ==========================================
+
+class RunHistoryItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    run_id: str
+    pipeline_name: str
+    dataset_id: str
+    filename: Optional[str] = None
+    file_format: Optional[str] = "CSV"
+    dataset_fingerprint: Optional[str] = None
+    contract_version: str
+    started_at: datetime
+    completed_at: Optional[datetime] = None
+    duration_seconds: Optional[float] = None
+    status: str
+    rows_received: int
+    rows_processed: int
+    rows_invalid: int
+    rows_rejected: int
+    error_message: Optional[str] = None
+
+
+class RunHistoryResponse(BaseModel):
+    runs: List[RunHistoryItem]
+    total_count: int
+
+
+class RunArtifactsResponse(BaseModel):
+    run_id: str
+    dataset_id: str
+    filename: str
+    file_format: str
+    artifact_path: Optional[str] = None
+    row_count: int
+    column_count: int
+    fingerprint: Optional[str] = None
+    config: Dict[str, Any] = {}
+    sample_records: List[Dict[str, Any]] = []
+
+
+class RunLogsResponse(BaseModel):
+    run_id: str
+    status: str
+    started_at: datetime
+    completed_at: Optional[datetime] = None
+    duration_seconds: Optional[float] = None
+    tasks: List[PipelineTaskItem]
+    error_message: Optional[str] = None
+    raw_logs: List[str] = []
+
+
+# ==========================================
+# PHASE 6: FAILURE & AI DIAGNOSIS SCHEMAS
+# ==========================================
+
+class RankedCauseItem(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
+    cause: str
+    confidence: float
+    evidence: List[str]
+    model_version: str
+
+
+class FailureDiagnosisResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True, protected_namespaces=())
+
+    failure_id: str
+    run_id: str
+    failed_task_name: Optional[str] = None
+    failure_category: str
+    error_message: Optional[str] = None
+    ranked_causes: List[RankedCauseItem]
+    evidence: List[str]
+    diagnosis_method: str
+    model_version: str
+    suggested_action: Optional[str] = None
+    created_at: datetime
+
+
+# ==========================================
+# PHASE 7: BACKFILL PLANNING SCHEMAS
+# ==========================================
+
+class BackfillPlanResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    plan_id: str
+    failure_id: str
+    run_id: str
+    failed_task: str
+    affected_partitions: List[str]
+    selected_tasks: List[str]
+    execution_order: List[str]
+    estimated_runtime_seconds: float
+    estimated_cost_usd: float
+    rationale: Optional[str] = None
+    status: str
+    created_at: datetime
+
+
+# ==========================================
+# PHASE 8: COST-AWARE SCHEDULING SCHEMAS
+# ==========================================
+
+class ScheduleResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    schedule_id: str
+    plan_id: str
+    run_id: str
+    resource_profile: str
+    estimated_runtime_seconds: float
+    estimated_cost_usd: float
+    budget_limit_usd: Optional[float] = None
+    deadline_seconds: Optional[float] = None
+    optimization_objective: str
+    baseline_comparison: Dict[str, Any] = {}
+    selection_rationale: Optional[str] = None
+    status: str
+    created_at: datetime
+
+
+# ==========================================
+# PHASE 9: RECOVERY EXECUTION SCHEMAS
+# ==========================================
+
+class RecoveryRunResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    recovery_id: str
+    plan_id: str
+    schedule_id: Optional[str] = None
+    original_run_id: str
+    new_run_id: Optional[str] = None
+    status: str
+    current_task: Optional[str] = None
+    retry_count: int
+    max_retries: int
+    started_at: datetime
+    completed_at: Optional[datetime] = None
+    duration_seconds: Optional[float] = None
+    contract_validation_status: Optional[str] = None
+    output_validation_status: Optional[str] = None
+    task_states: Dict[str, str] = {}
+    logs_text: Optional[str] = None
+    error_message: Optional[str] = None
+
+
+# ==========================================
+# PHASE 10: MONITORING & EXPERIMENTS SCHEMAS
+# ==========================================
+
+class MonitoringDashboardResponse(BaseModel):
+    total_runs: int
+    success_count: int
+    failure_count: int
+    success_rate_percent: float
+    total_rows_processed: int
+    avg_duration_seconds: float
+    total_estimated_cost_usd: float
+    failure_categories: Dict[str, int]
+    avg_diagnosis_latency_ms: float
+    recovery_success_count: int
+    recovery_failure_count: int
+    recent_runs: List[RunHistoryItem]
+
+
+class ExperimentRunRequest(BaseModel):
+    experiment_type: str  # diagnosis_accuracy, backfill_efficiency, scheduling_cost, recovery_resilience
+    config: Dict[str, Any] = {}
+
+
+class ExperimentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    experiment_id: str
+    experiment_type: str
+    name: str
+    config: Dict[str, Any]
+    baseline_metrics: Dict[str, Any]
+    proposed_metrics: Dict[str, Any]
+    raw_csv_path: Optional[str] = None
+    created_at: datetime
+
+

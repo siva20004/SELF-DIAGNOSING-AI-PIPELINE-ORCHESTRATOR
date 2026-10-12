@@ -3,7 +3,7 @@ import { Play, Loader2, CheckCircle2, AlertTriangle, Cpu, ArrowRight } from 'luc
 import { executePipeline, getRunResults } from '../services/api';
 import PipelineResults from './PipelineResults';
 
-export default function PipelineExecution({ dataset, validationResult, disabled }) {
+export default function PipelineExecution({ dataset, validationResult, disabled, onNavigateToDiagnosis, onNavigateToHistory }) {
   const [executing, setExecuting] = useState(false);
   const [executionResult, setExecutionResult] = useState(null);
   const [pipelineResultsData, setPipelineResultsData] = useState(null);
@@ -106,8 +106,18 @@ export default function PipelineExecution({ dataset, validationResult, disabled 
                 PIPELINE EXECUTION FAILED
               </div>
               <div>{executionError.message}</div>
-              <div style={{ marginTop: '8px', fontSize: '12px', color: '#64748b' }}>
-                Run ID: <code>{executionError.runId}</code> | Timestamp: {executionError.timestamp}
+              <div style={{ marginTop: '12px', fontSize: '12px', color: '#64748b', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                <span>Run ID: <code>{executionError.runId}</code> | Timestamp: {executionError.timestamp}</span>
+                {onNavigateToDiagnosis && executionError.runId && executionError.runId !== 'N/A' && (
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    style={{ background: '#dc2626', borderColor: '#b91c1c' }}
+                    onClick={() => onNavigateToDiagnosis(executionError.runId)}
+                  >
+                    Diagnose Failure with AI (Phase 6) →
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -115,7 +125,20 @@ export default function PipelineExecution({ dataset, validationResult, disabled 
 
         {/* Audited Results Section */}
         {pipelineResultsData && (
-          <PipelineResults results={pipelineResultsData} dataset={dataset} />
+          <>
+            <PipelineResults results={pipelineResultsData} dataset={dataset} />
+            {onNavigateToHistory && (
+              <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => onNavigateToHistory(pipelineResultsData.run_id)}
+                >
+                  View Run in Persistent History (Phase 5) →
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

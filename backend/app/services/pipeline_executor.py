@@ -1,4 +1,5 @@
 import io
+import json
 import uuid
 import datetime
 from typing import Dict, Any
@@ -46,6 +47,17 @@ def execute_pipeline(dataset_id: str, db: Session) -> PipelineExecutionResponse:
     now = datetime.datetime.utcnow()
     run_id = f"RUN-{now.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6].upper()}"
 
+    # Calculate dataset fingerprint and config metadata
+    from app.services.run_history import compute_file_fingerprint
+    fingerprint = compute_file_fingerprint(file_path)
+    config_dict = {
+        "engine": "polars_vectorized",
+        "contract": "sales_contract_v1.yaml",
+        "contract_version": contract_version,
+        "quality_checks": True,
+        "format": file_type
+    }
+
     pipeline_run = PipelineRun(
         run_id=run_id,
         pipeline_name="Sales_Transaction_Pipeline",
@@ -57,7 +69,10 @@ def execute_pipeline(dataset_id: str, db: Session) -> PipelineExecutionResponse:
         rows_valid=0,
         rows_invalid=0,
         rows_processed=0,
-        rows_rejected=0,
+        file_format=file_type,
+        dataset_fingerprint=fingerprint,
+        config_json=json.dumps(config_dict),
+        artifact_path=file_path,
     )
     db.add(pipeline_run)
     db.commit()

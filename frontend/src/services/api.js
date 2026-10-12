@@ -92,6 +92,89 @@ export const getCurrentUser = async (userId) => {
   return response.data;
 };
 
+// ==========================================
+// PHASES 5-10 API CLIENT METHODS
+// ==========================================
+
+export const listRuns = async (limit = 50, offset = 0) => {
+  const response = await client.get('/api/runs', { params: { limit, offset } });
+  return response.data;
+};
+
+export const getRunArtifacts = async (runId) => {
+  const response = await client.get(`/api/runs/${runId}/artifacts`);
+  return response.data;
+};
+
+export const getRunLogs = async (runId) => {
+  const response = await client.get(`/api/runs/${runId}/logs`);
+  return response.data;
+};
+
+export const diagnoseRun = async (runId, useAi = true) => {
+  const response = await client.post(`/api/runs/${runId}/diagnose`, null, { params: { use_ai: useAi } });
+  return response.data;
+};
+
+export const getRunDiagnosis = async (runId) => {
+  const response = await client.get(`/api/runs/${runId}/diagnosis`);
+  return response.data;
+};
+
+export const planBackfill = async (failureId) => {
+  const response = await client.post(`/api/failures/${failureId}/plan-backfill`);
+  return response.data;
+};
+
+export const approveBackfill = async (planId) => {
+  const response = await client.post(`/api/backfills/${planId}/approve`);
+  return response.data;
+};
+
+export const getBackfillPlan = async (planId) => {
+  const response = await client.get(`/api/backfills/${planId}`);
+  return response.data;
+};
+
+export const scheduleBackfill = async (planId, objective = 'minimize_cost', budget = null, deadline = null) => {
+  const params = { objective };
+  if (budget) params.budget_limit_usd = budget;
+  if (deadline) params.deadline_seconds = deadline;
+  const response = await client.post(`/api/backfills/${planId}/schedule`, null, { params });
+  return response.data;
+};
+
+export const approveSchedule = async (scheduleId) => {
+  const response = await client.post(`/api/schedules/${scheduleId}/approve`);
+  return response.data;
+};
+
+export const startRecovery = async (planId, scheduleId = null, maxRetries = 3) => {
+  const params = { max_retries: maxRetries };
+  if (scheduleId) params.schedule_id = scheduleId;
+  const response = await client.post(`/api/backfills/${planId}/recover`, null, { params });
+  return response.data;
+};
+
+export const getRecoveryStatus = async (recoveryId) => {
+  const response = await client.get(`/api/recoveries/${recoveryId}`);
+  return response.data;
+};
+
+export const getMonitoringDashboard = async () => {
+  const response = await client.get('/api/monitoring/dashboard');
+  return response.data;
+};
+
+export const runExperiment = async (experimentType, config = {}) => {
+  const response = await client.post('/api/experiments/run', { experiment_type: experimentType, config });
+  return response.data;
+};
+
+export const getExperimentCsvUrl = (experimentId) => {
+  return `${API_BASE_URL}/api/experiments/${experimentId}/csv`;
+};
+
 export default {
   registerUser,
   loginUser,
@@ -107,5 +190,21 @@ export default {
   getValidationErrors,
   getRunTasks,
   getRunResults,
+  listRuns,
+  getRunArtifacts,
+  getRunLogs,
+  diagnoseRun,
+  getRunDiagnosis,
+  planBackfill,
+  approveBackfill,
+  getBackfillPlan,
+  scheduleBackfill,
+  approveSchedule,
+  startRecovery,
+  getRecoveryStatus,
+  getMonitoringDashboard,
+  runExperiment,
+  getExperimentCsvUrl,
 };
+
 
