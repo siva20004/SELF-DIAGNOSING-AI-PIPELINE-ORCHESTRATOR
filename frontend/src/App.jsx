@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Database, ShieldCheck, PlayCircle, RefreshCw, Layers, CheckCircle2, User, LogOut, Globe, History, AlertOctagon, BarChart3 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Database, ShieldCheck, PlayCircle, RefreshCw, Layers, CheckCircle2, User, LogOut, Globe, History, AlertOctagon, BarChart3, Users, Clock } from 'lucide-react';
 import DatasetUpload from './components/DatasetUpload';
 import ValidationPanel from './components/ValidationPanel';
 import PipelineExecution from './components/PipelineExecution';
@@ -8,12 +8,28 @@ import FailureDiagnosis from './components/FailureDiagnosis';
 import BackfillAndRecovery from './components/BackfillAndRecovery';
 import MonitoringAndExperiments from './components/MonitoringAndExperiments';
 import AuthCard from './components/AuthCard';
+import UserAuditModal from './components/UserAuditModal';
+import { recordVisit, logOutUser } from './services/api';
 import './App.css';
+
+// 30 minutes in milliseconds
+const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(() => {
     try {
       const saved = localStorage.getItem('pipeline_auth_user');
+      const loginTime = localStorage.getItem('pipeline_login_timestamp');
+      if (saved && loginTime) {
+        const elapsed = Date.now() - parseInt(loginTime, 10);
+        if (elapsed > SESSION_TIMEOUT_MS) {
+          // Session expired after 30 minutes
+          localStorage.removeItem('pipeline_auth_user');
+          localStorage.removeItem('pipeline_auth_token');
+          localStorage.removeItem('pipeline_login_timestamp');
+          return null;
+        }
+      }
       return saved ? JSON.parse(saved) : null;
     } catch {
       return null;
@@ -23,24 +39,79 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('pipeline'); // 'pipeline' | 'history' | 'diagnosis' | 'backfill' | 'monitoring'
   const [selectedRunIdForDiagnosis, setSelectedRunIdForDiagnosis] = useState(null);
   const [selectedFailureIdForBackfill, setSelectedFailureIdForBackfill] = useState(null);
+  const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
+  const [sessionExpiryWarning, setSessionExpiryWarning] = useState(null);
 
   const [dataset, setDataset] = useState(null);
   const [validationResult, setValidationResult] = useState(null);
 
+  // 1. Record Website Visit in Neon/PostgreSQL when website opens
+  useEffect(() => {
+    recordVisit({
+      user_id: currentUser ? currentUser.id : null,
+      email: currentUser ? currentUser.email : null,
+      page_url: window.location.pathname || '/',
+      details: {
+        screen: `${window.innerWidth}x${window.innerHeight}`,
+        referrer: document.referrer || 'Direct Visit',
+        time: new Date().toISOString()
+      }
+    });
+  }, [currentUser?.id]);
+
+  // 2. Continuous 30-Minute Session Expiration Timer
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const interval = setInterval(() => {
+      const loginTime = localStorage.getItem('pipeline_login_timestamp');
+      if (loginTime) {
+        const elapsed = Date.now() - parseInt(loginTime, 10);
+        const remaining = SESSION_TIMEOUT_MS - elapsed;
+
+        if (remaining <= 0) {
+          // Session expired! Log to Neon database and log out user
+          logOutUser(currentUser.id, currentUser.email, 'SESSION_EXPIRED');
+          localStorage.removeItem('pipeline_auth_user');
+          localStorage.removeItem('pipeline_auth_token');
+          localStorage.removeItem('pipeline_login_timestamp');
+          setCurrentUser(null);
+          setSessionExpiryWarning('Your 30-minute session has expired. For enterprise security, please log in again.');
+        } else if (remaining < 3 * 60 * 1000) {
+          // Warning in the last 3 minutes
+          const mins = Math.ceil(remaining / 60000);
+          setSessionExpiryWarning(`Session expires in ${mins} minute(s).`);
+        } else {
+          setSessionExpiryWarning(null);
+        }
+      }
+    }, 15000); // Check every 15 seconds
+
+    return () => clearInterval(interval);
+  }, [currentUser]);
+
   const handleAuthSuccess = (user, token) => {
+    const now = Date.now().toString();
     localStorage.setItem('pipeline_auth_user', JSON.stringify(user));
+    localStorage.setItem('pipeline_login_timestamp', now);
     if (token) {
       localStorage.setItem('pipeline_auth_token', token);
     }
+    setSessionExpiryWarning(null);
     setCurrentUser(user);
   };
 
   const handleSignOut = () => {
+    if (currentUser) {
+      logOutUser(currentUser.id, currentUser.email, 'MANUAL');
+    }
     localStorage.removeItem('pipeline_auth_user');
     localStorage.removeItem('pipeline_auth_token');
+    localStorage.removeItem('pipeline_login_timestamp');
     setCurrentUser(null);
     setDataset(null);
     setValidationResult(null);
+    setSessionExpiryWarning(null);
   };
 
   const handleDatasetUploaded = (uploadedData) => {
@@ -96,13 +167,40 @@ export default function App() {
                 <Database size={13} style={{ marginRight: '5px' }} />
                 PostgreSQL Cloud DB
               </span>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setIsAuditModalOpen(true)}
+                title="View Live User Visits & Logins from Neon Database"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '5px 10px', fontSize: '12px' }}
+              >
+                <Users size={13} />
+                Neon User Audit
+              </button>
             </div>
           </div>
         </header>
 
+        {sessionExpiryWarning && (
+          <div style={{
+            background: 'rgba(239, 68, 68, 0.15)',
+            border: '1px solid #ef4444',
+            color: '#fca5a5',
+            padding: '10px 20px',
+            textAlign: 'center',
+            fontSize: '13px',
+            fontWeight: '600'
+          }}>
+            <Clock size={14} style={{ display: 'inline', marginRight: '6px', verticalAlign: '-2px' }} />
+            {sessionExpiryWarning}
+          </div>
+        )}
+
         <main className="auth-main-wrapper">
           <AuthCard onAuthSuccess={handleAuthSuccess} />
         </main>
+
+        <UserAuditModal isOpen={isAuditModalOpen} onClose={() => setIsAuditModalOpen(false)} />
 
         <footer className="app-footer">
           <div>
@@ -149,6 +247,16 @@ export default function App() {
               <ShieldCheck size={13} style={{ marginRight: '5px' }} />
               sales_contract_v1.yaml (v1.0)
             </span>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => setIsAuditModalOpen(true)}
+              title="View Neon Database User Visits & Logins"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '5px 10px', fontSize: '12px' }}
+            >
+              <Users size={13} />
+              Neon User Audit
+            </button>
             {dataset && (
               <button type="button" className="btn btn-reset" onClick={handleReset}>
                 <RefreshCw size={13} style={{ marginRight: '4px' }} />
@@ -167,6 +275,21 @@ export default function App() {
           </div>
         </div>
       </header>
+
+      {sessionExpiryWarning && (
+        <div style={{
+          background: 'rgba(245, 158, 11, 0.15)',
+          border: '1px solid #f59e0b',
+          color: '#fbbf24',
+          padding: '8px 20px',
+          textAlign: 'center',
+          fontSize: '13px',
+          fontWeight: '600'
+        }}>
+          <Clock size={14} style={{ display: 'inline', marginRight: '6px', verticalAlign: '-2px' }} />
+          {sessionExpiryWarning}
+        </div>
+      )}
 
       {/* Platform Navigation Tabs (Phases 1-10) */}
       <nav className="main-nav-bar">
@@ -313,6 +436,9 @@ export default function App() {
           <MonitoringAndExperiments />
         )}
       </main>
+
+      {/* User Access & Activity Audit Modal */}
+      <UserAuditModal isOpen={isAuditModalOpen} onClose={() => setIsAuditModalOpen(false)} />
 
       {/* Enterprise Footer */}
       <footer className="app-footer">

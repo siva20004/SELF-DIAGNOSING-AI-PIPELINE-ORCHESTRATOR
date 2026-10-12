@@ -138,7 +138,32 @@ class User(Base):
     country = Column(String(128), nullable=False, default="United States")
     email = Column(String(255), unique=True, index=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)
+    login_count = Column(Integer, default=0, nullable=False)
+    visit_count = Column(Integer, default=0, nullable=False)
+    last_login_at = Column(DateTime, nullable=True)
+    last_visit_at = Column(DateTime, nullable=True)
+    last_ip = Column(String(64), nullable=True)
+    last_user_agent = Column(String(512), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now(), nullable=False)
+
+    activities = relationship("UserActivity", back_populates="user", cascade="all, delete-orphan")
+
+
+class UserActivity(Base):
+    __tablename__ = "user_activities"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    email = Column(String(255), nullable=True, index=True)
+    user_name = Column(String(255), nullable=True)
+    activity_type = Column(String(64), nullable=False, index=True)  # LOGIN, VISIT, LOGOUT, SESSION_EXPIRED
+    ip_address = Column(String(64), nullable=True)
+    user_agent = Column(String(512), nullable=True)
+    page_url = Column(String(512), nullable=True)
+    details_json = Column(Text, nullable=True)
+    timestamp = Column(DateTime, default=datetime.utcnow, server_default=func.now(), nullable=False, index=True)
+
+    user = relationship("User", back_populates="activities")
 
 
 class FailureDiagnosisRecord(Base):

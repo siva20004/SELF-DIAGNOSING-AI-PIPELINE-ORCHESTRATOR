@@ -99,6 +99,33 @@ export const getCurrentUser = async (userId) => {
   return response.data;
 };
 
+export const recordVisit = async (visitData = {}) => {
+  try {
+    const response = await client.post('/api/auth/record-visit', visitData);
+    return response.data;
+  } catch (err) {
+    console.warn('Record visit notice:', err);
+    return null;
+  }
+};
+
+export const logOutUser = async (userId = null, email = null, reason = 'MANUAL') => {
+  try {
+    const response = await client.post('/api/auth/logout', null, {
+      params: { user_id: userId, email, reason },
+    });
+    return response.data;
+  } catch (err) {
+    console.warn('Logout log notice:', err);
+    return null;
+  }
+};
+
+export const getUserActivities = async (limit = 100) => {
+  const response = await client.get('/api/auth/activities', { params: { limit } });
+  return response.data;
+};
+
 // ==========================================
 // PHASES 5-10 API CLIENT METHODS
 // ==========================================
@@ -212,6 +239,9 @@ export default {
   getMonitoringDashboard,
   runExperiment,
   getExperimentCsvUrl,
+  recordVisit,
+  logOutUser,
+  getUserActivities,
 };
 
 

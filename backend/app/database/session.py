@@ -71,11 +71,28 @@ def init_db():
         "ALTER TABLE pipeline_runs ADD COLUMN IF NOT EXISTS rows_rejected BIGINT DEFAULT 0;",
         "ALTER TABLE schedules ALTER COLUMN estimated_cost_usd TYPE NUMERIC(12, 6);",
         "ALTER TABLE backfill_plans ALTER COLUMN estimated_cost_usd TYPE NUMERIC(12, 6);",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS login_count INTEGER DEFAULT 0;",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS visit_count INTEGER DEFAULT 0;",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP;",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_visit_at TIMESTAMP;",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_ip VARCHAR(64);",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_user_agent VARCHAR(512);",
+        """CREATE TABLE IF NOT EXISTS user_activities (
+            id BIGSERIAL PRIMARY KEY,
+            user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            email VARCHAR(255),
+            user_name VARCHAR(255),
+            activity_type VARCHAR(64) NOT NULL,
+            ip_address VARCHAR(64),
+            user_agent VARCHAR(512),
+            page_url VARCHAR(512),
+            details_json TEXT,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+        );""",
     ]
-    with engine.connect() as conn:
-        for stmt in migrations:
-            try:
+    for stmt in migrations:
+        try:
+            with engine.begin() as conn:
                 conn.execute(text(stmt))
-                conn.commit()
-            except Exception as mig_err:
-                pass
+        except Exception as mig_err:
+            pass

@@ -5,7 +5,7 @@ import json
 import datetime
 from datetime import datetime
 from typing import List, Optional
-from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, Query
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from app.database.session import get_db
@@ -19,6 +19,8 @@ from app.models.models import (
     ScheduleRecord,
     RecoveryRunRecord,
     ExperimentRecord,
+    User,
+    UserActivity,
 )
 from app.schemas.schemas import (
     DatasetUploadResponse,
@@ -32,6 +34,8 @@ from app.schemas.schemas import (
     UserLoginRequest,
     UserResponse,
     AuthResponse,
+    RecordVisitRequest,
+    UserActivityStatsResponse,
     RunHistoryResponse,
     RunArtifactsResponse,
     RunLogsResponse,
@@ -47,7 +51,13 @@ from app.services.ingestion import handle_file_upload, get_dataset_preview, get_
 from app.services.contract_loader import load_contract
 from app.services.validator import validate_dataset
 from app.services.pipeline_executor import execute_pipeline, get_pipeline_results
-from app.services.auth import register_user, login_user, get_user_by_id
+from app.services.auth import (
+    register_user,
+    login_user,
+    get_user_by_id,
+    record_user_activity,
+    get_user_activity_stats,
+)
 from app.services.run_history import get_all_runs, get_run_artifacts, get_run_logs
 from app.services.diagnosis_engine import create_or_get_failure_diagnosis
 from app.services.backfill_planner import create_backfill_plan, approve_backfill_plan
@@ -482,25 +492,88 @@ def fix_date_format(
 
 
 # ==========================================
-# AUTHENTICATION ENDPOINTS
+# AUTHENTICATION & USER ACTIVITY AUDIT ENDPOINTS
 # ==========================================
 
 @router.post("/auth/register", response_model=AuthResponse)
 def register(
     data: UserRegisterRequest,
+    request: Request,
     db: Session = Depends(get_db)
 ):
-    """Registers a new user with hashed password and stores in PostgreSQL."""
-    return register_user(db, data)
+    """Registers a new user with hashed password and stores in PostgreSQL/Neon with audit logging."""
+    client_ip = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent", "")
+    return register_user(db, data, ip=client_ip, user_agent=user_agent)
 
 
 @router.post("/auth/login", response_model=AuthResponse)
 def login(
     data: UserLoginRequest,
+    request: Request,
     db: Session = Depends(get_db)
 ):
-    """Authenticates an existing user and returns token and user profile."""
-    return login_user(db, data)
+    """Authenticates an existing user and records login timestamp, count, IP, and audit trail in PostgreSQL/Neon."""
+    client_ip = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent", "")
+    return login_user(db, data, ip=client_ip, user_agent=user_agent)
+
+
+@router.post("/auth/record-visit")
+def record_visit(
+    data: RecordVisitRequest,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """Records a website visit event in PostgreSQL/Neon and increments user visit counter."""
+    client_ip = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent", "")
+    details = json.dumps(data.details) if data.details else None
+    act = record_user_activity(
+        db=db,
+        activity_type="VISIT",
+        user_id=data.user_id,
+        email=data.email,
+        ip=client_ip,
+        user_agent=user_agent,
+        page_url=data.page_url or "/",
+        details_json=details
+    )
+    return {"status": "SUCCESS", "activity_id": act.id, "timestamp": act.timestamp}
+
+
+@router.post("/auth/logout")
+def logout(
+    request: Request,
+    user_id: Optional[int] = Query(None),
+    email: Optional[str] = Query(None),
+    reason: Optional[str] = Query("MANUAL"),
+    db: Session = Depends(get_db)
+):
+    """Logs a logout or session expiration event in PostgreSQL/Neon."""
+    client_ip = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent", "")
+    act_type = "SESSION_EXPIRED" if reason == "SESSION_EXPIRED" else "LOGOUT"
+    act = record_user_activity(
+        db=db,
+        activity_type=act_type,
+        user_id=user_id,
+        email=email,
+        ip=client_ip,
+        user_agent=user_agent,
+        page_url="/auth/logout",
+        details_json=f'{{"reason": "{reason}"}}'
+    )
+    return {"status": "SUCCESS", "activity_id": act.id}
+
+
+@router.get("/auth/activities", response_model=UserActivityStatsResponse)
+def get_activities(
+    limit: int = Query(100, ge=1, le=500),
+    db: Session = Depends(get_db)
+):
+    """Returns aggregated audit report of users, visits, logins, and timestamps from PostgreSQL/Neon."""
+    return get_user_activity_stats(db, limit=limit)
 
 
 @router.get("/auth/me/{user_id}", response_model=UserResponse)

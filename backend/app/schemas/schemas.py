@@ -163,12 +163,49 @@ class UserResponse(BaseModel):
     last_name: str
     country: str
     email: str
+    login_count: int = 0
+    visit_count: int = 0
+    last_login_at: Optional[datetime] = None
+    last_visit_at: Optional[datetime] = None
+    last_ip: Optional[str] = None
+    last_user_agent: Optional[str] = None
     created_at: datetime
 
 
 class AuthResponse(BaseModel):
     token: str
     user: UserResponse
+    expires_in_minutes: int = 30
+
+
+class RecordVisitRequest(BaseModel):
+    user_id: Optional[int] = None
+    email: Optional[str] = None
+    page_url: Optional[str] = None
+    details: Optional[Dict[str, Any]] = None
+
+
+class UserActivityItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    user_id: Optional[int] = None
+    email: Optional[str] = None
+    user_name: Optional[str] = None
+    activity_type: str
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    page_url: Optional[str] = None
+    details_json: Optional[str] = None
+    timestamp: datetime
+
+
+class UserActivityStatsResponse(BaseModel):
+    total_users: int
+    total_logins: int
+    total_visits: int
+    users: List[UserResponse]
+    recent_activities: List[UserActivityItem]
 
 
 # ==========================================
