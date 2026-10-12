@@ -1,5 +1,7 @@
 import os
 import json
+import uuid
+import datetime
 import pytest
 import polars as pl
 from fastapi.testclient import TestClient
@@ -61,13 +63,14 @@ def test_phase_5_run_history_and_artifacts(tmp_path):
         db.merge(ds)
         db.commit()
 
-        run_id = "RUN-PHASE5-TEST-001"
+        run_id = f"RUN-PHASE5-{uuid.uuid4().hex[:6].upper()}"
         run = PipelineRun(
             run_id=run_id,
             dataset_id=dataset_id,
             file_format="CSV",
             contract_version="1.0",
             status="SUCCESS",
+            started_at=datetime.datetime.utcnow(),
             dataset_fingerprint="sha256_dummy_fingerprint_phase5",
             artifact_path=str(sample_csv),
             rows_received=2,
@@ -97,7 +100,7 @@ def test_phase_5_run_history_and_artifacts(tmp_path):
         db.commit()
 
         # Test service: get_all_runs
-        history = get_all_runs(db, limit=10)
+        history = get_all_runs(db, limit=50)
         assert history.total_count >= 1
         found_run = next((r for r in history.runs if r.run_id == run_id), None)
         assert found_run is not None

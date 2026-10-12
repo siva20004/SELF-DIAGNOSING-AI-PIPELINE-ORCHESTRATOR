@@ -1,6 +1,8 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+// When running locally in Vite dev mode, empty string routes through Vite proxy to http://127.0.0.1:8000
+// When deployed on Vercel with VITE_API_URL, it uses that remote backend URL
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
 const client = axios.create({
   baseURL: API_BASE_URL,

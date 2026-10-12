@@ -60,3 +60,21 @@ def get_db():
 def init_db():
     import app.models  # noqa: F401
     Base.metadata.create_all(bind=engine)
+
+    # Safe idempotent column migrations for existing tables (supports both local and cloud databases)
+    from sqlalchemy import text
+    migrations = [
+        "ALTER TABLE pipeline_runs ADD COLUMN IF NOT EXISTS file_format VARCHAR(32);",
+        "ALTER TABLE pipeline_runs ADD COLUMN IF NOT EXISTS dataset_fingerprint VARCHAR(128);",
+        "ALTER TABLE pipeline_runs ADD COLUMN IF NOT EXISTS config_json TEXT;",
+        "ALTER TABLE pipeline_runs ADD COLUMN IF NOT EXISTS artifact_path TEXT;",
+        "ALTER TABLE schedules ALTER COLUMN estimated_cost_usd TYPE NUMERIC(12, 6);",
+        "ALTER TABLE backfill_plans ALTER COLUMN estimated_cost_usd TYPE NUMERIC(12, 6);",
+    ]
+    with engine.connect() as conn:
+        for stmt in migrations:
+            try:
+                conn.execute(text(stmt))
+                conn.commit()
+            except Exception as mig_err:
+                pass

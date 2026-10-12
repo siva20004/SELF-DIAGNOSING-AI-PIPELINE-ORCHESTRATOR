@@ -285,10 +285,19 @@ def execute_pipeline(dataset_id: str, db: Session) -> PipelineExecutionResponse:
     except HTTPException:
         raise
     except Exception as e:
-        pipeline_run.status = "FAILED"
-        pipeline_run.completed_at = datetime.datetime.utcnow()
-        pipeline_run.error_message = str(e)
-        db.commit()
+        import traceback
+        traceback.print_exc()
+        try:
+            db.rollback()
+            failed_run = db.query(PipelineRun).filter(PipelineRun.run_id == run_id).first()
+            if failed_run:
+                failed_run.status = "FAILED"
+                failed_run.completed_at = datetime.datetime.utcnow()
+                failed_run.error_message = str(e)
+                db.commit()
+        except Exception as db_err:
+            print(f"Error persisting failure state: {db_err}")
+            db.rollback()
         raise HTTPException(status_code=500, detail=f"Pipeline execution failure: {str(e)}")
 
 
