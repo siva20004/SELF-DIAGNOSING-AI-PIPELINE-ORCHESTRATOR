@@ -44,6 +44,7 @@ class PipelineRun(Base):
     rows_valid = Column(BigInteger, default=0)
     rows_invalid = Column(BigInteger, default=0)
     rows_processed = Column(BigInteger, default=0)
+    rows_rejected = Column(BigInteger, default=0)
     error_message = Column(Text, nullable=True)
     file_format = Column(String(32), default="CSV", nullable=False)
     dataset_fingerprint = Column(String(128), nullable=True)

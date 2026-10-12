@@ -6,7 +6,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
 const client = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 120000, // 2 minutes for processing large 1M records
+  timeout: 600000, // 10 minutes for large datasets (e.g. 1M records)
 });
 
 export const uploadDataset = async (file, sheetName = null) => {
@@ -86,6 +86,11 @@ export const loginUser = async (credentials) => {
 
 export const fixDateFormat = async (datasetId) => {
   const response = await client.post(`/api/datasets/${datasetId}/fix-date-format`);
+  return response.data;
+};
+
+export const alignSchema = async (datasetId) => {
+  const response = await client.post(`/api/datasets/${datasetId}/align-schema`);
   return response.data;
 };
 

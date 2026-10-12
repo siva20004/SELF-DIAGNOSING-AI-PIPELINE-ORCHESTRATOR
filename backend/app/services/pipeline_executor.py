@@ -359,9 +359,9 @@ def get_pipeline_results(run_id: str, db: Session) -> PipelineResultsResponse:
         started_at=run.started_at,
         completed_at=run.completed_at,
         duration_seconds=duration,
-        rows_received=run.rows_received,
-        rows_processed=run.rows_processed,
-        rows_rejected=run.rows_rejected,
+        rows_received=getattr(run, "rows_received", 0) or 0,
+        rows_processed=getattr(run, "rows_processed", 0) or 0,
+        rows_rejected=getattr(run, "rows_rejected", 0) or (getattr(run, "rows_invalid", 0) or 0),
         metrics=PipelineMetrics(
             total_sales=total_sales,
             total_quantity=total_quantity,

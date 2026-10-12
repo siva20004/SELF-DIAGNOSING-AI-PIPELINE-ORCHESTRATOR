@@ -273,6 +273,7 @@ export default function App() {
               dataset={dataset}
               onValidationComplete={handleValidationComplete}
               disabled={!dataset}
+              onNavigateToDiagnosis={handleSelectRunForDiagnosis}
             />
 
             {/* SECTION 3: PIPELINE EXECUTION & RESULTS */}

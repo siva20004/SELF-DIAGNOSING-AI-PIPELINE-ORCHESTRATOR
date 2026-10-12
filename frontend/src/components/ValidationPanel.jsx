@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
-import { ShieldCheck, ShieldX, Play, FileCode, CheckCircle, AlertTriangle, ArrowRight, Loader2, CalendarCog } from 'lucide-react';
-import { validateDataset, fixDateFormat } from '../services/api';
+import { ShieldCheck, ShieldX, Play, FileCode, CheckCircle, AlertTriangle, ArrowRight, Loader2, CalendarCog, Wrench, AlertOctagon } from 'lucide-react';
+import { validateDataset, fixDateFormat, alignSchema } from '../services/api';
 import ValidationErrors from './ValidationErrors';
 
-export default function ValidationPanel({ dataset, onValidationComplete, disabled }) {
+export default function ValidationPanel({ dataset, onValidationComplete, disabled, onNavigateToDiagnosis }) {
   const [validating, setValidating] = useState(false);
   const [validationResult, setValidationResult] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
   const [fixingDate, setFixingDate] = useState(false);
   const [dateFixResult, setDateFixResult] = useState(null);
+  const [aligningSchema, setAligningSchema] = useState(false);
+  const [alignResult, setAlignResult] = useState(null);
 
   const handleValidate = async () => {
     if (!dataset?.dataset_id) return;
@@ -45,6 +47,25 @@ export default function ValidationPanel({ dataset, onValidationComplete, disable
       setErrorMsg(msg);
     } finally {
       setFixingDate(false);
+    }
+  };
+
+  const handleAlignSchema = async () => {
+    if (!dataset?.dataset_id) return;
+    setAligningSchema(true);
+    setAlignResult(null);
+
+    try {
+      const result = await alignSchema(dataset.dataset_id);
+      setAlignResult(result);
+      // Auto re-validate after aligning schema
+      setTimeout(() => handleValidate(), 800);
+    } catch (err) {
+      console.error(err);
+      const msg = err.response?.data?.detail || err.message || 'Schema alignment failed';
+      setErrorMsg(msg);
+    } finally {
+      setAligningSchema(false);
     }
   };
 
@@ -219,6 +240,111 @@ export default function ValidationPanel({ dataset, onValidationComplete, disable
                 <div>
                   <strong>Data Contract Verification Passed:</strong> All {validationResult.rows_received.toLocaleString()} rows satisfy 100% of schema definitions, numeric ranges, enum restrictions, and arithmetic rules. Pipeline execution is now unlocked.
                 </div>
+              </div>
+            )}
+
+            {/* If Invalid, show Auto-Align Schema button if MISSING_REQUIRED_COLUMN exists */}
+            {validationResult.status === 'INVALID' &&
+              validationResult.required_column_checks?.failed > 0 && (
+              <div style={{
+                marginTop: '16px',
+                padding: '14px 18px',
+                background: '#eff6ff',
+                border: '1px solid #bfdbfe',
+                borderRadius: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '12px',
+                flexWrap: 'wrap'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <Wrench size={20} style={{ color: '#2563eb', flexShrink: 0 }} />
+                  <div>
+                    <strong style={{ color: '#1e40af', fontSize: '13px' }}>Schema Mismatch Detected ({validationResult.required_column_checks.failed} missing columns)</strong>
+                    <p style={{ color: '#1d4ed8', fontSize: '12px', margin: '2px 0 0 0' }}>
+                      Auto-align column aliases (e.g. date ➔ transaction_date, status ➔ transaction_status), compute total_amount, and complete required contract schema.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleAlignSchema}
+                  disabled={aligningSchema}
+                  style={{
+                    whiteSpace: 'nowrap',
+                    background: '#2563eb',
+                    fontSize: '12.5px',
+                    padding: '8px 16px'
+                  }}
+                >
+                  {aligningSchema ? (
+                    <>
+                      <Loader2 size={14} className="spinner" style={{ marginRight: '6px' }} />
+                      Aligning Schema...
+                    </>
+                  ) : (
+                    <>
+                      <Wrench size={14} style={{ marginRight: '6px' }} />
+                      Auto-Align & Complete Schema
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+
+            {/* Schema Align Success Message */}
+            {alignResult && alignResult.status === 'SUCCESS' && (
+              <div className="alert alert-success" style={{ marginTop: '12px' }}>
+                <CheckCircle size={18} style={{ marginRight: '8px', flexShrink: 0 }} />
+                <div>
+                  <strong>Schema Aligned:</strong> Successfully aligned {alignResult.aligned_columns?.length || 0} column(s) ({alignResult.aligned_columns?.join(', ')}). Re-validating dataset...
+                </div>
+              </div>
+            )}
+
+            {/* AI Diagnosis and Remediation Gate Banner */}
+            {validationResult.status === 'INVALID' && onNavigateToDiagnosis && (
+              <div style={{
+                marginTop: '14px',
+                padding: '14px 18px',
+                background: '#fef2f2',
+                border: '1px solid #fecaca',
+                borderRadius: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '12px',
+                flexWrap: 'wrap'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <AlertOctagon size={20} style={{ color: '#ef4444', flexShrink: 0 }} />
+                  <div>
+                    <strong style={{ color: '#991b1b', fontSize: '13px' }}>Automated AI Root Cause Diagnosis & Backfill Available</strong>
+                    <p style={{ color: '#b91c1c', fontSize: '12px', margin: '2px 0 0 0' }}>
+                      Validation Run ID: <code>{validationResult.run_id}</code>. Isolate root causes, analyze telemetry, and plan backfill execution.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => onNavigateToDiagnosis(validationResult.run_id)}
+                  style={{
+                    whiteSpace: 'nowrap',
+                    background: '#dc2626',
+                    borderColor: '#b91c1c',
+                    fontSize: '12.5px',
+                    padding: '8px 16px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <AlertOctagon size={14} />
+                  Diagnose with AI (Phase 6) →
+                </button>
               </div>
             )}
 

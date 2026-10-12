@@ -68,6 +68,7 @@ def init_db():
         "ALTER TABLE pipeline_runs ADD COLUMN IF NOT EXISTS dataset_fingerprint VARCHAR(128);",
         "ALTER TABLE pipeline_runs ADD COLUMN IF NOT EXISTS config_json TEXT;",
         "ALTER TABLE pipeline_runs ADD COLUMN IF NOT EXISTS artifact_path TEXT;",
+        "ALTER TABLE pipeline_runs ADD COLUMN IF NOT EXISTS rows_rejected BIGINT DEFAULT 0;",
         "ALTER TABLE schedules ALTER COLUMN estimated_cost_usd TYPE NUMERIC(12, 6);",
         "ALTER TABLE backfill_plans ALTER COLUMN estimated_cost_usd TYPE NUMERIC(12, 6);",
     ]

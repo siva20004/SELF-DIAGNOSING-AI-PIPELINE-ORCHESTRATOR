@@ -1,6 +1,9 @@
 import uuid
 import re
 import os
+import json
+import datetime
+from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -185,7 +188,96 @@ def validate_dataset_endpoint(
         db=db,
         contract_data=contract_data
     )
+
+    if summary.status == "INVALID":
+        from app.services.run_history import compute_file_fingerprint
+        from app.services.diagnosis_engine import create_or_get_failure_diagnosis
+
+        now = datetime.utcnow()
+        err_msg = f"Contract validation failed: {summary.validation_errors_count} violation(s) across {summary.rows_invalid} row(s)."
+        failed_run = PipelineRun(
+            run_id=val_run_id,
+            pipeline_name="Sales_Transaction_Pipeline",
+            dataset_id=dataset_id,
+            contract_version=summary.contract_version,
+            started_at=now,
+            completed_at=now,
+            status="FAILED",
+            rows_received=summary.rows_received,
+            rows_valid=summary.rows_valid,
+            rows_invalid=summary.rows_invalid,
+            rows_processed=0,
+            rows_rejected=summary.rows_invalid,
+            file_format=file_type,
+            dataset_fingerprint=compute_file_fingerprint(file_path),
+            config_json=json.dumps({"pipeline": "sales_contract_validation", "contract": "sales_contract_v1.yaml"}),
+            artifact_path=file_path,
+            error_message=err_msg
+        )
+        db.add(failed_run)
+
+        val_task = PipelineTask(
+            run_id=val_run_id,
+            task_name="VALIDATION",
+            status="FAILED",
+            started_at=now,
+            completed_at=now,
+            rows_input=summary.rows_received,
+            rows_output=summary.rows_valid,
+            error_message=err_msg
+        )
+        db.add(val_task)
+        db.commit()
+
+        try:
+            create_or_get_failure_diagnosis(val_run_id, db, use_ai=True)
+        except Exception as diag_err:
+            print(f"Auto-diagnosis notice: {diag_err}")
+
     return summary
+
+
+@router.post("/datasets/{dataset_id}/align-schema")
+def align_dataset_schema_endpoint(
+    dataset_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Intelligently reconciles column aliases (e.g. date -> transaction_date, status -> transaction_status, qty -> quantity),
+    computes missing total_amount if quantity & unit_price exist, standardizes ID prefixes,
+    and imputes missing contract columns with canonical defaults.
+    """
+    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+    if not dataset:
+        raise HTTPException(status_code=404, detail=f"Dataset {dataset_id} not found")
+
+    from app.services.ingestion import UPLOAD_DIR, get_dataset_file_path, read_dataset_df
+    from app.services.file_parsers import align_dataframe_schema
+
+    file_path, file_type = get_dataset_file_path(dataset_id, db)
+    df = read_dataset_df(file_path, file_type)
+
+    aligned_df, added_or_fixed = align_dataframe_schema(df)
+
+    # Save aligned dataframe directly to normalized CSV path
+    norm_path = os.path.join(UPLOAD_DIR, f"{dataset_id}_normalized.csv")
+    aligned_df.write_csv(norm_path)
+
+    legacy_path = os.path.join(UPLOAD_DIR, f"{dataset_id}_{dataset.filename}")
+    if os.path.exists(legacy_path):
+        aligned_df.write_csv(legacy_path)
+
+    dataset.columns_count = len(aligned_df.columns)
+    dataset.rows_count = len(aligned_df)
+    db.commit()
+
+    return {
+        "status": "SUCCESS",
+        "dataset_id": dataset_id,
+        "aligned_columns": added_or_fixed,
+        "total_columns": len(aligned_df.columns),
+        "total_rows": len(aligned_df)
+    }
 
 
 @router.get("/runs/{run_id}", response_model=PipelineExecutionResponse)
@@ -215,8 +307,8 @@ def get_run(
         rows_received=run.rows_received,
         rows_valid=run.rows_valid,
         rows_invalid=run.rows_invalid,
-        rows_processed=run.rows_processed,
-        rows_rejected=run.rows_rejected,
+        rows_processed=run.rows_processed or 0,
+        rows_rejected=getattr(run, "rows_rejected", 0) or (run.rows_invalid or 0),
         error_message=run.error_message,
         tasks=[PipelineTaskItem.model_validate(t) for t in tasks]
     )
