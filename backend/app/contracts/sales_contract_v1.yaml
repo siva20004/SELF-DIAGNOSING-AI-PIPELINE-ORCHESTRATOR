@@ -8,76 +8,108 @@ schema:
     type: string
     required: true
     pattern: "^T[0-9]{8}$"
+    aliases: ["transaction_id", "trans_id", "tx_id", "order_id", "transaction", "transid", "txid", "orderid", "Transaction ID", "Txn ID", "TransactionID"]
+    default: "T10000001"
 
   customer_id:
     type: string
     required: true
     pattern: "^C[0-9]{6}$"
+    aliases: ["customer_id", "cust_id", "client_id", "customer_i", "custid", "customerid", "Customer ID", "Cust ID", "CustomerID"]
+    default: "C100001"
 
   product_id:
     type: string
     required: true
     pattern: "^P[0-9]{3}$"
+    aliases: ["product_id", "prod_id", "item_id", "productid", "prodid", "itemid", "Product ID", "Prod ID", "ProductID"]
+    default: "P101"
 
   customer_name:
     type: string
     required: true
+    aliases: ["customer_name", "cust_name", "client_name", "customer", "customername", "Customer Name", "Cust Name", "Name"]
+    default: "Customer"
 
   city:
     type: string
     required: true
+    aliases: ["city", "town", "City", "Town"]
+    default: "Mumbai"
 
   state:
     type: string
     required: true
+    aliases: ["state", "province", "region", "State", "Province"]
+    default: "Maharashtra"
 
   customer_segment:
     type: string
     required: true
     allowed_values: [Regular, Premium, Enterprise, Student]
+    aliases: ["customer_segment", "customer_s", "segment", "tier", "customersegment", "Customer Segment", "Segment"]
+    default: "Regular"
 
   product_name:
     type: string
     required: true
+    aliases: ["product_name", "prod_name", "item_name", "item", "productname", "Product Name", "Item Name", "Description"]
+    default: "Standard Item"
 
   category:
     type: string
     required: true
+    aliases: ["category", "dept", "Category", "Department"]
+    default: "Electronics"
 
   quantity:
     type: integer
     required: true
     min: 1
     max: 20
+    aliases: ["quantity", "qty", "count", "Quantity", "Qty", "Count"]
+    default: 1
 
   unit_price:
     type: number
     required: true
     min: 0
+    aliases: ["unit_price", "price", "rate", "cost", "unitprice", "Unit Price", "Price", "Rate"]
+    default: 10.0
 
   total_amount:
     type: number
     required: true
     min: 0
+    aliases: ["total_amount", "amount", "total", "totalamount", "Total Amount", "Amount", "Total"]
+    default: 10.0
 
   payment_method:
     type: string
     required: true
     allowed_values: [UPI, CARD, NETBANKING, COD, WALLET]
+    aliases: ["payment_method", "payment", "mode", "paymentmethod", "Payment Method", "Payment Mode", "Payment"]
+    default: "CARD"
 
   transaction_status:
     type: string
     required: true
     allowed_values: [COMPLETED, PENDING, CANCELLED]
+    aliases: ["transaction_status", "status", "order_status", "transactionstatus", "Transaction Status", "Status"]
+    default: "COMPLETED"
 
   transaction_date:
     type: date
     required: true
+    aliases: ["transaction_date", "date", "order_date", "transactiondate", "Transaction Date", "Date", "Txn Date"]
+    default: "2026-01-01"
 
   source_system:
     type: string
     required: true
     allowed_values: [WEB, MOBILE, POS, PARTNER]
+    aliases: ["source_system", "source", "system", "channel", "sourcesystem", "Source System", "Source", "Channel"]
+    default: "POS"
 
 quality_rules:
   total_amount_equals_quantity_times_unit_price: true

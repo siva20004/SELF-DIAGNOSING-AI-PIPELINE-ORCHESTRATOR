@@ -4,7 +4,7 @@ import { executePipeline, getRunResults } from '../services/api';
 import PipelineResults from './PipelineResults';
 import { formatIST } from '../utils/dateUtils';
 
-export default function PipelineExecution({ dataset, validationResult, disabled, onNavigateToDiagnosis, onNavigateToHistory }) {
+export default function PipelineExecution({ dataset, validationResult, disabled, onNavigateToDiagnosis, onNavigateToHistory, autoExecute, onAutoExecuteDone }) {
   const [executing, setExecuting] = useState(false);
   const [executionResult, setExecutionResult] = useState(null);
   const [pipelineResultsData, setPipelineResultsData] = useState(null);
@@ -16,7 +16,8 @@ export default function PipelineExecution({ dataset, validationResult, disabled,
   );
 
   const handleExecute = async () => {
-    if (!dataset?.dataset_id || !isUnlocked) return;
+    const dId = dataset?.dataset_id || dataset?.id;
+    if (!dId || !isUnlocked) return;
 
     setExecuting(true);
     setExecutionError(null);
@@ -24,7 +25,7 @@ export default function PipelineExecution({ dataset, validationResult, disabled,
     const contractToExecute = validationResult?.contract_name || validationResult?.contract_type || dataset?.suggested_contract || 'attendance';
 
     try {
-      const execRes = await executePipeline(dataset.dataset_id, contractToExecute);
+      const execRes = await executePipeline(dId, contractToExecute);
       setExecutionResult(execRes);
 
       // Fetch comprehensive calculated results from database
@@ -44,8 +45,19 @@ export default function PipelineExecution({ dataset, validationResult, disabled,
     }
   };
 
+  React.useEffect(() => {
+    if (autoExecute && isUnlocked && !executing && !executionResult) {
+      if (onAutoExecuteDone) onAutoExecuteDone();
+      const el = document.getElementById('pipeline-execution-step3');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      handleExecute();
+    }
+  }, [autoExecute, isUnlocked]);
+
   return (
-    <div className={`section-card ${!isUnlocked || disabled ? 'section-disabled' : ''}`}>
+    <div id="pipeline-execution-step3" className={`section-card ${!isUnlocked || disabled ? 'section-disabled' : ''}`}>
       <div className="section-header">
         <div className="section-title-wrap">
           <span className="section-number">3</span>

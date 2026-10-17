@@ -127,8 +127,9 @@ export const fixDateFormat = async (datasetId) => {
   return response.data;
 };
 
-export const alignSchema = async (datasetId) => {
-  const response = await client.post(`/api/datasets/${datasetId}/align-schema`);
+export const alignSchema = async (datasetId, contractName = null) => {
+  const params = contractName ? { contract_name: contractName } : {};
+  const response = await client.post(`/api/datasets/${datasetId}/align-schema`, null, { params });
   return response.data;
 };
 

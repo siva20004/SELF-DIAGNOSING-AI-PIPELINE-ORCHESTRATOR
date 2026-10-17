@@ -45,6 +45,7 @@ export default function App() {
 
   const [dataset, setDataset] = useState(null);
   const [validationResult, setValidationResult] = useState(null);
+  const [shouldAutoExecute, setShouldAutoExecute] = useState(false);
 
   // 1. Record Website Visit in Neon/PostgreSQL when website opens
   useEffect(() => {
@@ -401,6 +402,9 @@ export default function App() {
               onValidationComplete={handleValidationComplete}
               disabled={!dataset}
               onNavigateToDiagnosis={handleSelectRunForDiagnosis}
+              onAutoResumeExecution={() => {
+                setShouldAutoExecute(true);
+              }}
             />
 
             {/* SECTION 3: PIPELINE EXECUTION & RESULTS */}
@@ -410,6 +414,8 @@ export default function App() {
               disabled={!dataset || !(validationResult?.status === 'VALID' || validationResult?.status === 'VALID_WITH_WARNINGS')}
               onNavigateToDiagnosis={handleSelectRunForDiagnosis}
               onNavigateToHistory={handleNavigateToHistory}
+              autoExecute={shouldAutoExecute}
+              onAutoExecuteDone={() => setShouldAutoExecute(false)}
             />
           </>
         )}

@@ -4,7 +4,7 @@ import { validateDataset, fixDateFormat, alignSchema } from '../services/api';
 import ValidationErrors from './ValidationErrors';
 import DataCorrectionModal from './DataCorrectionModal';
 
-export default function ValidationPanel({ dataset, onValidationComplete, disabled, onNavigateToDiagnosis }) {
+export default function ValidationPanel({ dataset, onValidationComplete, disabled, onNavigateToDiagnosis, onAutoResumeExecution }) {
   const [validating, setValidating] = useState(false);
   const [validationResult, setValidationResult] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
@@ -62,24 +62,44 @@ export default function ValidationPanel({ dataset, onValidationComplete, disable
     }
   };
 
-  const handleAlignSchema = async () => {
-    if (!dataset?.dataset_id) return;
+  const handleMapFields = async () => {
+    const dId = dataset?.dataset_id || dataset?.id;
+    if (!dId) return;
+
     setAligningSchema(true);
-    setAlignResult(null);
+    setErrorMsg(null);
 
     try {
-      const result = await alignSchema(dataset.dataset_id);
+      // 1. Automatically perform schema mapping between incoming source dataset and active contract schema
+      const activeContract = contractName || 'sales';
+      const result = await alignSchema(dId, activeContract);
       setAlignResult(result);
-      // Auto re-validate after aligning schema
-      setTimeout(() => handleValidate(), 800);
+
+      // 2. Immediately trigger validation by executing Validate Dataset action
+      const summary = await validateDataset(dId, activeContract);
+
+      // 3. Update contract validation status to valid, clear invalid flag
+      setValidationResult(summary);
+      if (onValidationComplete) {
+        onValidationComplete(summary);
+      }
+
+      // 4. Automatically resume pipeline execution under step 3
+      if (summary.status === 'VALID' || summary.status === 'VALID_WITH_WARNINGS') {
+        if (onAutoResumeExecution) {
+          onAutoResumeExecution();
+        }
+      }
     } catch (err) {
       console.error(err);
-      const msg = err.response?.data?.detail || err.message || 'Schema alignment failed';
+      const msg = err.response?.data?.detail || err.message || 'Schema mapping and validation failed';
       setErrorMsg(msg);
     } finally {
       setAligningSchema(false);
     }
   };
+
+  const handleAlignSchema = handleMapFields;
 
   const getCheckStatusBadge = (stats) => {
     if (!stats || stats.total === 0) {
@@ -112,11 +132,22 @@ export default function ValidationPanel({ dataset, onValidationComplete, disable
           </div>
         </div>
         {validationResult && (
-          <span className={`badge ${validationResult.status === 'VALID' ? 'badge-success' : 'badge-danger'}`}>
-            {validationResult.status === 'VALID' ? (
+          <span className={`badge ${
+            validationResult.status === 'VALID' || validationResult.status === 'VALID_WITH_WARNINGS'
+              ? 'badge-success'
+              : validationResult.status === 'NEEDS_MAPPING'
+              ? 'badge-warning'
+              : 'badge-danger'
+          }`}>
+            {validationResult.status === 'VALID' || validationResult.status === 'VALID_WITH_WARNINGS' ? (
               <>
                 <ShieldCheck size={14} style={{ marginRight: '4px' }} />
                 VALID
+              </>
+            ) : validationResult.status === 'NEEDS_MAPPING' ? (
+              <>
+                <Wrench size={14} style={{ marginRight: '4px' }} />
+                NEEDS MAPPING
               </>
             ) : (
               <>
@@ -246,31 +277,68 @@ export default function ValidationPanel({ dataset, onValidationComplete, disable
         {validationResult && (
           <div className="validation-summary-box">
             <div className="summary-banner-row">
-              <div className="summary-status-pill">
-                <span className="summary-pill-label">Contract Status</span>
-                <span className={`status-badge-large ${
-                  validationResult.status === 'VALID' ? 'status-valid' : 
-                  validationResult.status === 'VALID_WITH_WARNINGS' ? 'status-warning' :
-                  validationResult.status === 'NEEDS_MAPPING' ? 'status-needs-mapping' : 'status-invalid'
-                }`} style={{
-                  padding: '6px 14px',
-                  borderRadius: '6px',
-                  fontWeight: 700,
-                  fontSize: '13px',
-                  background: validationResult.status === 'VALID' ? '#dcfce7' :
-                              validationResult.status === 'VALID_WITH_WARNINGS' ? '#fef3c7' :
-                              validationResult.status === 'NEEDS_MAPPING' ? '#e0f2fe' : '#fee2e2',
-                  color: validationResult.status === 'VALID' ? '#166534' :
-                         validationResult.status === 'VALID_WITH_WARNINGS' ? '#b45309' :
-                         validationResult.status === 'NEEDS_MAPPING' ? '#0369a1' : '#b91c1c',
-                  border: `1px solid ${
-                    validationResult.status === 'VALID' ? '#86efac' :
-                    validationResult.status === 'VALID_WITH_WARNINGS' ? '#fcd34d' :
-                    validationResult.status === 'NEEDS_MAPPING' ? '#7dd3fc' : '#fca5a5'
-                  }`
-                }}>
-                  {validationResult.status.replace(/_/g, ' ')}
-                </span>
+              <div className="summary-status-pill" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                <div>
+                  <span className="summary-pill-label">Contract Status</span>
+                  <span className={`status-badge-large ${
+                    validationResult.status === 'VALID' ? 'status-valid' : 
+                    validationResult.status === 'VALID_WITH_WARNINGS' ? 'status-warning' :
+                    validationResult.status === 'NEEDS_MAPPING' ? 'status-needs-mapping' : 'status-invalid'
+                  }`} style={{
+                    padding: '6px 14px',
+                    borderRadius: '6px',
+                    fontWeight: 700,
+                    fontSize: '13px',
+                    background: validationResult.status === 'VALID' ? '#dcfce7' :
+                                validationResult.status === 'VALID_WITH_WARNINGS' ? '#fef3c7' :
+                                validationResult.status === 'NEEDS_MAPPING' ? '#e0f2fe' : '#fee2e2',
+                    color: validationResult.status === 'VALID' ? '#166534' :
+                           validationResult.status === 'VALID_WITH_WARNINGS' ? '#b45309' :
+                           validationResult.status === 'NEEDS_MAPPING' ? '#0369a1' : '#b91c1c',
+                    border: `1px solid ${
+                      validationResult.status === 'VALID' ? '#86efac' :
+                      validationResult.status === 'VALID_WITH_WARNINGS' ? '#fcd34d' :
+                      validationResult.status === 'NEEDS_MAPPING' ? '#7dd3fc' : '#fca5a5'
+                    }`
+                  }}>
+                    {validationResult.status.replace(/_/g, ' ')}
+                  </span>
+                </div>
+                {validationResult.status === 'NEEDS_MAPPING' && (
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm btn-map-fields"
+                    onClick={handleMapFields}
+                    disabled={aligningSchema || validating}
+                    title="Automatically map columns to active contract and resume execution"
+                    style={{
+                      background: '#0284c7',
+                      borderColor: '#0369a1',
+                      color: '#ffffff',
+                      fontWeight: 700,
+                      padding: '6px 14px',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      cursor: 'pointer',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                    }}
+                  >
+                    {aligningSchema ? (
+                      <>
+                        <Loader2 size={13} className="spinner" />
+                        Mapping Fields...
+                      </>
+                    ) : (
+                      <>
+                        <Wrench size={13} />
+                        Map Fields
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
               <div className="summary-stat-group">
                 <div className="stat-box">
@@ -314,32 +382,64 @@ export default function ValidationPanel({ dataset, onValidationComplete, disable
                   <Wrench size={22} style={{ color: '#2563eb', flexShrink: 0 }} />
                   <div>
                     <strong style={{ color: '#1e40af', fontSize: '13px' }}>
-                      Column Aliases Detected — Review and Fix Data Required
+                      Column Aliases Detected — Schema Mapping Required
                     </strong>
                     <p style={{ color: '#1d4ed8', fontSize: '12px', margin: '2px 0 0 0' }}>
-                      {Object.keys(validationResult.mappable_columns || {}).length} column(s) match known aliases (e.g. {Object.entries(validationResult.mappable_columns || {}).slice(0, 3).map(([target, src]) => `${src} ➔ ${target}`).join(', ')}). Click 'Review and Fix Data' to preview and apply transformations safely without altering original data.
+                      {Object.keys(validationResult.mappable_columns || {}).length} column(s) match known aliases (e.g. {Object.entries(validationResult.mappable_columns || {}).slice(0, 3).map(([target, src]) => `${src} ➔ ${target}`).join(', ')}). Click <strong>Map Fields</strong> to automatically perform schema mapping and resume execution under Step 3, or click <strong>Configure Mapping</strong> to review transformations.
                     </p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  className="btn btn-warning"
-                  onClick={() => setIsCorrectionModalOpen(true)}
-                  style={{
-                    background: '#2563eb',
-                    borderColor: '#1d4ed8',
-                    color: '#ffffff',
-                    fontSize: '12.5px',
-                    padding: '8px 16px',
-                    fontWeight: 600,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  <Wrench size={14} />
-                  Review and Fix Data →
-                </button>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={handleMapFields}
+                    disabled={aligningSchema || validating}
+                    style={{
+                      background: '#0284c7',
+                      borderColor: '#0369a1',
+                      color: '#ffffff',
+                      fontSize: '12.5px',
+                      padding: '8px 16px',
+                      fontWeight: 700,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {aligningSchema ? (
+                      <>
+                        <Loader2 size={14} className="spinner" />
+                        Mapping Fields...
+                      </>
+                    ) : (
+                      <>
+                        <Wrench size={14} />
+                        Map Fields
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => setIsCorrectionModalOpen(true)}
+                    style={{
+                      background: '#f8fafc',
+                      borderColor: '#cbd5e1',
+                      color: '#334155',
+                      fontSize: '12px',
+                      padding: '8px 14px',
+                      fontWeight: 600,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Configure Mapping
+                  </button>
+                </div>
               </div>
             )}
 

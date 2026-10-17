@@ -363,6 +363,7 @@ def apply_corrections_endpoint(
 @router.post("/datasets/{dataset_id}/align-schema")
 def align_dataset_schema_endpoint(
     dataset_id: str,
+    contract_name: Optional[str] = Query("sales"),
     db: Session = Depends(get_db)
 ):
     """
@@ -386,17 +387,23 @@ def align_dataset_schema_endpoint(
     norm_path = os.path.join(UPLOAD_DIR, f"{dataset_id}_normalized.csv")
     aligned_df.write_csv(norm_path)
 
+    corr_path = os.path.join(UPLOAD_DIR, f"{dataset_id}_corrected.csv")
+    if os.path.exists(corr_path):
+        aligned_df.write_csv(corr_path)
+
     legacy_path = os.path.join(UPLOAD_DIR, f"{dataset_id}_{dataset.filename}")
     if os.path.exists(legacy_path):
         aligned_df.write_csv(legacy_path)
 
     dataset.columns_count = len(aligned_df.columns)
     dataset.rows_count = len(aligned_df)
+    dataset.status = "VALID"
     db.commit()
 
     return {
         "status": "SUCCESS",
         "dataset_id": dataset_id,
+        "contract_name": contract_name or "sales",
         "aligned_columns": added_or_fixed,
         "total_columns": len(aligned_df.columns),
         "total_rows": len(aligned_df)

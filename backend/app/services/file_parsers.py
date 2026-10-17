@@ -100,22 +100,22 @@ CONTRACT_COLUMNS = [
 ]
 
 HEADER_FRAGMENTS_MAP = {
-    "transaction_id": ["transaction_id", "trans_id", "tx_id", "order_id", "transaction"],
-    "customer_id": ["customer_id", "cust_id", "client_id", "customer_i", "_customer_i"],
-    "product_id": ["product_id", "prod_id", "item_id", "dproduct_id"],
-    "customer_name": ["customer_name", "cust_name", "client_name", "customer_n", "customer"],
-    "city": ["city", "town"],
+    "transaction_id": ["transaction_id", "trans_id", "tx_id", "order_id", "transaction", "transid", "txid", "orderid", "transactionid", "txnid", "tx_number", "transaction_number"],
+    "customer_id": ["customer_id", "cust_id", "client_id", "customer_i", "_customer_i", "custid", "customerid", "clientid", "account_id"],
+    "product_id": ["product_id", "prod_id", "item_id", "dproduct_id", "prodid", "productid", "itemid", "sku", "item_code", "product_code"],
+    "customer_name": ["customer_name", "cust_name", "client_name", "customer_n", "customer", "customername", "custname", "client", "full_name"],
+    "city": ["city", "town", "municipality"],
     "state": ["state", "province", "region"],
-    "customer_segment": ["customer_segment", "customer_s", "segment", "tier"],
-    "product_name": ["product_name", "product_na", "eproduct_na", "prod_name", "item_name", "item"],
-    "category": ["category", "mcategory", "dept"],
-    "quantity": ["quantity", "qty", "count"],
-    "unit_price": ["unit_price", "price", "rate", "cost"],
-    "total_amount": ["total_amount", "total_amou", "total_amoun", "amount", "total"],
-    "payment_method": ["payment_method", "payment_m", "npayment_m", "payment", "mode"],
-    "transaction_status": ["transaction_status", "status", "order_status"],
-    "transaction_date": ["transaction_date", "transaction_d", "_transaction_d", "date", "order_date"],
-    "source_system": ["source_system", "source_syst", "source", "system", "channel"],
+    "customer_segment": ["customer_segment", "customer_s", "segment", "tier", "customersegment", "membership"],
+    "product_name": ["product_name", "product_na", "eproduct_na", "prod_name", "item_name", "item", "productname", "prodname", "title", "description"],
+    "category": ["category", "mcategory", "dept", "department", "product_category"],
+    "quantity": ["quantity", "qty", "count", "units", "volume"],
+    "unit_price": ["unit_price", "price", "rate", "cost", "unitprice", "selling_price", "price_per_unit"],
+    "total_amount": ["total_amount", "total_amou", "total_amoun", "amount", "total", "totalamount", "revenue", "gross_amount", "sale_amount"],
+    "payment_method": ["payment_method", "payment_m", "npayment_m", "payment", "mode", "paymentmethod", "pay_mode", "tender_type"],
+    "transaction_status": ["transaction_status", "status", "order_status", "transactionstatus", "txn_status"],
+    "transaction_date": ["transaction_date", "transaction_d", "_transaction_d", "date", "order_date", "transactiondate", "txndate", "timestamp", "datetime"],
+    "source_system": ["source_system", "source_syst", "source", "system", "channel", "sourcesystem", "origin"],
 }
 
 
@@ -133,23 +133,38 @@ def reconcile_column_headers(headers: List[str], sample_rows: Optional[List[List
     if num_cols == 16 and sample_rows:
         r0 = sample_rows[0]
         if len(r0) >= 3:
-            has_t = bool(re.match(r"^T\d{8}$", r0[0]))
-            has_c = bool(re.match(r"^C\d{6}$", r0[1]))
-            has_p = bool(re.match(r"^P\d{3}$", r0[2]))
+            has_t = bool(re.match(r"^T\d{8}$", str(r0[0])))
+            has_c = bool(re.match(r"^C\d{6}$", str(r0[1])))
+            has_p = bool(re.match(r"^P\d{3}$", str(r0[2])))
             if has_t and has_c and has_p:
                 return list(CONTRACT_COLUMNS)
 
-    # 2. Match headers via fragment keywords
+    # 2. Match headers via fragment keywords and alphanumeric normalization
     mapped = list(headers)
     used_targets = set()
     for idx, h in enumerate(headers):
         h_clean = re.sub(r"[^a-zA-Z0-9_]", "", str(h).lower().strip())
+        h_alnum = re.sub(r"[^a-zA-Z0-9]", "", str(h).lower().strip())
         for target_col, aliases in HEADER_FRAGMENTS_MAP.items():
             if target_col in used_targets:
                 continue
-            if any(alias == h_clean or (len(alias) >= 4 and alias in h_clean) for alias in aliases):
+            target_alnum = re.sub(r"[^a-zA-Z0-9]", "", target_col)
+            # Direct or alnum match
+            if h_clean == target_col or h_alnum == target_alnum:
                 mapped[idx] = target_col
                 used_targets.add(target_col)
+                break
+            # Alias match
+            matched_alias = False
+            for alias in aliases:
+                a_clean = re.sub(r"[^a-zA-Z0-9_]", "", alias.lower().strip())
+                a_alnum = re.sub(r"[^a-zA-Z0-9]", "", alias.lower().strip())
+                if h_clean == a_clean or h_alnum == a_alnum or (len(a_clean) >= 4 and a_clean in h_clean):
+                    mapped[idx] = target_col
+                    used_targets.add(target_col)
+                    matched_alias = True
+                    break
+            if matched_alias:
                 break
 
     return mapped
@@ -212,6 +227,73 @@ def align_dataframe_schema(df: pl.DataFrame) -> Tuple[pl.DataFrame, List[str]]:
         if modified:
             df = df.with_columns(pl.Series("customer_id", new_c, dtype=pl.String))
             added_or_fixed.append("customer_id (format standardized)")
+
+    # 3b. Standardize product_id if not matching ^P[0-9]{3}$
+    if "product_id" in df.columns:
+        p_series = df["product_id"].to_list()
+        new_p = []
+        p_mod = False
+        for i, val in enumerate(p_series):
+            s_val = str(val).strip()
+            if not re.match(r"^P[0-9]{3}$", s_val):
+                digits = re.sub(r"\D", "", s_val)
+                new_id = f"P{digits.zfill(3)[-3:]}" if digits else f"P{100 + (i % 800):03d}"
+                new_p.append(new_id)
+                p_mod = True
+            else:
+                new_p.append(s_val)
+        if p_mod:
+            df = df.with_columns(pl.Series("product_id", new_p, dtype=pl.String))
+            added_or_fixed.append("product_id (format standardized to P###)")
+
+    # 3c. Standardize categorical enum columns
+    if "customer_segment" in df.columns:
+        valid_segs = {"Regular", "Premium", "Enterprise", "Student"}
+        seg_series = df["customer_segment"].to_list()
+        new_seg = []
+        seg_mod = False
+        for val in seg_series:
+            sv = str(val).strip().capitalize() if val else "Regular"
+            if sv not in valid_segs:
+                new_seg.append("Regular")
+                seg_mod = True
+            else:
+                new_seg.append(sv)
+        if seg_mod:
+            df = df.with_columns(pl.Series("customer_segment", new_seg, dtype=pl.String))
+            added_or_fixed.append("customer_segment (standardized to allowed values)")
+
+    if "payment_method" in df.columns:
+        valid_pm = {"UPI", "CARD", "NETBANKING", "COD", "WALLET"}
+        pm_series = df["payment_method"].to_list()
+        new_pm = []
+        pm_mod = False
+        for val in pm_series:
+            sv = str(val).strip().upper() if val else "CARD"
+            if sv not in valid_pm:
+                new_pm.append("CARD")
+                pm_mod = True
+            else:
+                new_pm.append(sv)
+        if pm_mod:
+            df = df.with_columns(pl.Series("payment_method", new_pm, dtype=pl.String))
+            added_or_fixed.append("payment_method (standardized to allowed values)")
+
+    if "source_system" in df.columns:
+        valid_ss = {"WEB", "MOBILE", "POS", "PARTNER"}
+        ss_series = df["source_system"].to_list()
+        new_ss = []
+        ss_mod = False
+        for val in ss_series:
+            sv = str(val).strip().upper() if val else "POS"
+            if sv not in valid_ss:
+                new_ss.append("POS")
+                ss_mod = True
+            else:
+                new_ss.append(sv)
+        if ss_mod:
+            df = df.with_columns(pl.Series("source_system", new_ss, dtype=pl.String))
+            added_or_fixed.append("source_system (standardized to allowed values)")
 
     # 4. Total amount computation & numeric validation
     if "quantity" in df.columns:

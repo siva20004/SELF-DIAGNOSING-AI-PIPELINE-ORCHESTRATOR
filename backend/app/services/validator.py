@@ -80,9 +80,13 @@ def validate_dataset(
     mappable_columns = {}
     matched_source_cols = set()
 
+    from app.services.file_parsers import HEADER_FRAGMENTS_MAP
+
     for col_name, col_meta in schema_spec.items():
         is_required = col_meta.get("required", False)
-        aliases = col_meta.get("aliases", [col_name])
+        base_aliases = col_meta.get("aliases", [col_name])
+        fragments = HEADER_FRAGMENTS_MAP.get(col_name, [])
+        aliases = list(dict.fromkeys(base_aliases + fragments))
         
         # Check direct presence
         if col_name in cols:
@@ -92,7 +96,7 @@ def validate_dataset(
             alias_match = None
             for c in cols:
                 clean_c = _norm(c)
-                if any(clean_c == _norm(a) for a in aliases):
+                if any(clean_c == _norm(a) or (len(_norm(a)) >= 4 and _norm(a) in clean_c) for a in aliases):
                     alias_match = c
                     break
             
@@ -451,10 +455,14 @@ def validate_dataset(
     rows_invalid_count = len(invalid_row_set)
     rows_valid_count = max(0, total_rows - rows_invalid_count)
 
-    if critical_errors or standard_errors:
+    if critical_errors:
         status = "INVALID"
     elif mappable_columns:
         status = "NEEDS_MAPPING"
+    elif standard_errors:
+        status = "INVALID"
+    elif warnings:
+        status = "VALID_WITH_WARNINGS"
     else:
         status = "VALID"
 
