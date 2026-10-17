@@ -508,16 +508,30 @@ def execute_pipeline_endpoint(
 
     file_path, file_type = get_dataset_file_path(dataset_id, db)
 
-    if not contract_name or contract_name.lower() in ("auto", "default", "none"):
+    c_lower = (contract_name or "").lower().strip()
+    if not c_lower or c_lower in ("auto", "default", "none"):
+        import polars as pl
+        try:
+            df_head = pl.read_csv(file_path, n_rows=5, infer_schema_length=0)
+            det = detect_contract_for_columns(list(df_head.columns))
+            c_lower = det.get("suggested_contract", "sales")
+        except Exception:
+            c_lower = "sales"
+
+    # Also detect if dataset columns strongly match attendance
+    try:
         import polars as pl
         df_head = pl.read_csv(file_path, n_rows=5, infer_schema_length=0)
         det = detect_contract_for_columns(list(df_head.columns))
-        contract_name = det["suggested_contract"]
+        if det.get("suggested_contract") == "attendance":
+            c_lower = "attendance"
+    except Exception:
+        pass
 
-    if contract_name == "attendance":
+    if "attendance" in c_lower or "student" in c_lower:
         return execute_attendance_pipeline(dataset_id, db, contract_name="attendance")
     else:
-        return execute_pipeline(dataset_id, db)
+        return execute_pipeline(dataset_id, db, contract_name="sales")
 
 
 @router.get("/runs/{run_id}/tasks", response_model=List[PipelineTaskItem])

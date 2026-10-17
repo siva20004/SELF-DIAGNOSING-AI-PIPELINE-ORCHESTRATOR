@@ -42,6 +42,13 @@ def get_dataset_file_path(dataset_id: str, db: Session) -> Tuple[str, str]:
     # Fallback to direct filename match (backward compatibility)
     file_path = os.path.join(UPLOAD_DIR, f"{dataset_id}_{dataset.filename}")
     if os.path.exists(file_path):
+        try:
+            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                first_line = f.readline()
+                if "," in first_line:
+                    return file_path, "CSV"
+        except Exception:
+            pass
         return file_path, dataset.file_type
 
     if os.path.exists(dataset.filename):

@@ -36,13 +36,29 @@ from app.services.aggregator import aggregate_dataset
 from app.services.quality_checker import run_quality_check
 
 
-def execute_pipeline(dataset_id: str, db: Session) -> PipelineExecutionResponse:
+def execute_pipeline(dataset_id: str, db: Session, contract_name: str = "sales") -> PipelineExecutionResponse:
     dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
     if not dataset:
         raise HTTPException(status_code=404, detail=f"Dataset {dataset_id} not found")
 
     file_path, file_type = get_dataset_file_path(dataset_id, db)
-    contract_data = load_contract()
+
+    # Robust Attendance Routing Guard: If dataset structure or contract indicates attendance, delegate seamlessly to attendance executor!
+    try:
+        import polars as pl
+        from app.services.contract_loader import detect_contract_for_columns
+        df_head = pl.read_csv(file_path, n_rows=5, infer_schema_length=0)
+        det = detect_contract_for_columns(list(df_head.columns))
+        if det.get("suggested_contract") == "attendance" or "attendance" in (contract_name or "").lower() or "student" in (contract_name or "").lower():
+            from app.services.attendance_executor import execute_attendance_pipeline
+            return execute_attendance_pipeline(dataset_id, db, contract_name="attendance")
+    except Exception:
+        pass
+
+    c_key = "sales"
+    if contract_name and contract_name.lower() in ("generic", "generic_tabular"):
+        c_key = "generic"
+    contract_data = load_contract(c_key)
     contract_version = str(contract_data.get("contract_version", "1.0"))
 
     # Generate dynamic unique run_id e.g. RUN-YYYYMMDD-HHMMSS-XXXX
@@ -54,7 +70,7 @@ def execute_pipeline(dataset_id: str, db: Session) -> PipelineExecutionResponse:
     fingerprint = compute_file_fingerprint(file_path)
     config_dict = {
         "engine": "polars_vectorized",
-        "contract": "sales_contract_v1.yaml",
+        "contract": f"{c_key}_contract_v1.yaml" if c_key == "sales" else f"{c_key}_contract.yaml",
         "contract_version": contract_version,
         "quality_checks": True,
         "format": file_type
@@ -111,7 +127,17 @@ def execute_pipeline(dataset_id: str, db: Session) -> PipelineExecutionResponse:
         val_task = record_task_start("VALIDATION")
         val_summary = validate_dataset(file_path, file_type, run_id, db, contract_data)
 
-        if val_summary.status != "VALID":
+        # If needs mapping or minor issues, attempt automatic alignment
+        if val_summary.status not in ("VALID", "VALID_WITH_WARNINGS"):
+            if val_summary.status == "NEEDS_MAPPING" or (val_summary.mappable_columns and not any(e.severity == "CRITICAL" for e in val_summary.errors_preview)):
+                from app.services.file_parsers import align_dataframe_schema
+                df_curr = pl.read_csv(file_path, infer_schema_length=0)
+                aligned_df, _ = align_dataframe_schema(df_curr)
+                aligned_df.write_csv(file_path)
+                # Re-validate
+                val_summary = validate_dataset(file_path, file_type, run_id, db, contract_data)
+
+        if val_summary.status not in ("VALID", "VALID_WITH_WARNINGS"):
             record_task_complete(
                 val_task,
                 status="FAILED",
@@ -128,7 +154,8 @@ def execute_pipeline(dataset_id: str, db: Session) -> PipelineExecutionResponse:
             db.commit()
             raise HTTPException(
                 status_code=400,
-                detail=f"PIPELINE EXECUTION BLOCKED: Dataset validation failed with {val_summary.validation_errors_count} errors."
+                detail=f"PIPELINE EXECUTION BLOCKED: Dataset validation failed with {val_summary.validation_errors_count} errors.",
+                headers={"X-Run-ID": run_id}
             )
 
         record_task_complete(

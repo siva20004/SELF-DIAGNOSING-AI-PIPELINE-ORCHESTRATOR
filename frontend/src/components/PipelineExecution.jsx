@@ -23,10 +23,18 @@ export default function PipelineExecution({ dataset, validationResult, disabled,
     setExecuting(true);
     setExecutionError(null);
 
-    const detected = typeof dataset?.suggested_contract === 'object'
-      ? dataset.suggested_contract.suggested_contract
-      : dataset?.suggested_contract;
-    const contractToExecute = validationResult?.contract_name || validationResult?.contract_type || detected || 'attendance';
+    let contractToExecute = 'sales';
+    const cType = (validationResult?.contract_type || '').toLowerCase();
+    const cName = (validationResult?.contract_name || '').toLowerCase();
+    const det = (typeof dataset?.suggested_contract === 'object' ? dataset?.suggested_contract?.suggested_contract : dataset?.suggested_contract || '').toLowerCase();
+
+    if (cType.includes('attendance') || cName.includes('attendance') || cName.includes('student') || det.includes('attendance')) {
+      contractToExecute = 'attendance';
+    } else if (cType.includes('generic') || cName.includes('generic') || det.includes('generic')) {
+      contractToExecute = 'generic';
+    } else {
+      contractToExecute = 'sales';
+    }
 
     try {
       const execRes = await executePipeline(dId, contractToExecute);
@@ -38,10 +46,11 @@ export default function PipelineExecution({ dataset, validationResult, disabled,
     } catch (err) {
       console.error(err);
       const detail = err.response?.data?.detail;
+      const runId = err.response?.headers?.['x-run-id'] || err.response?.data?.run_id || validationResult?.run_id || 'N/A';
       setExecutionError({
         message: typeof detail === 'string' ? detail : err.message || 'Pipeline execution failed',
         status: err.response?.status || 500,
-        runId: err.response?.data?.run_id || 'N/A',
+        runId,
         timestamp: formatIST(new Date().toISOString()),
       });
     } finally {
