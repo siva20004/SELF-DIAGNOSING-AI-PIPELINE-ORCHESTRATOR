@@ -250,7 +250,7 @@ export default function App() {
             </span>
             <span className="badge badge-meta">
               <ShieldCheck size={13} style={{ marginRight: '5px' }} />
-              {validationResult?.contract_name ? `${validationResult.contract_name} (v1.0)` : dataset?.suggested_contract ? `${dataset.suggested_contract}_contract.yaml` : 'Multi-Contract Engine (v1.0)'}
+              {validationResult?.contract_name ? `${validationResult.contract_name} (v1.0)` : dataset?.suggested_contract ? `${typeof dataset.suggested_contract === 'object' ? (dataset.suggested_contract.suggested_contract || 'sales') : dataset.suggested_contract}_contract.yaml` : 'Multi-Contract Engine (v1.0)'}
             </span>
             <button
               type="button"

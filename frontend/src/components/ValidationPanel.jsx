@@ -19,7 +19,10 @@ export default function ValidationPanel({ dataset, onValidationComplete, disable
 
   useEffect(() => {
     if (dataset?.suggested_contract) {
-      setContractName(dataset.suggested_contract);
+      const suggested = typeof dataset.suggested_contract === 'object'
+        ? (dataset.suggested_contract.suggested_contract || 'attendance')
+        : dataset.suggested_contract;
+      setContractName(suggested);
     }
   }, [dataset?.dataset_id, dataset?.suggested_contract]);
 
@@ -213,7 +216,7 @@ export default function ValidationPanel({ dataset, onValidationComplete, disable
                 gap: '4px'
               }}>
                 <Sparkles size={12} />
-                Auto-Detected: {dataset.suggested_contract}
+                Auto-Detected: {typeof dataset.suggested_contract === 'object' ? (dataset.suggested_contract.suggested_contract || 'attendance') : String(dataset.suggested_contract)}
               </span>
             )}
           </div>
@@ -252,7 +255,7 @@ export default function ValidationPanel({ dataset, onValidationComplete, disable
               {validating ? (
                 <>
                   <Loader2 size={16} className="spinner" style={{ marginRight: '6px' }} />
-                  Validating against {contractName}...
+                  Validating against {typeof contractName === 'string' ? contractName : 'contract'}...
                 </>
               ) : (
                 <>

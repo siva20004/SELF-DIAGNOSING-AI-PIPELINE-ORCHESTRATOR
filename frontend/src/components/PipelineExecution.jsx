@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Play, Loader2, CheckCircle2, AlertTriangle, Cpu, ArrowRight } from 'lucide-react';
 import { executePipeline, getRunResults } from '../services/api';
 import PipelineResults from './PipelineResults';
@@ -22,7 +22,10 @@ export default function PipelineExecution({ dataset, validationResult, disabled,
     setExecuting(true);
     setExecutionError(null);
 
-    const contractToExecute = validationResult?.contract_name || validationResult?.contract_type || dataset?.suggested_contract || 'attendance';
+    const detected = typeof dataset?.suggested_contract === 'object'
+      ? dataset.suggested_contract.suggested_contract
+      : dataset?.suggested_contract;
+    const contractToExecute = validationResult?.contract_name || validationResult?.contract_type || detected || 'attendance';
 
     try {
       const execRes = await executePipeline(dId, contractToExecute);
@@ -45,7 +48,7 @@ export default function PipelineExecution({ dataset, validationResult, disabled,
     }
   };
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (autoExecute && isUnlocked && !executing && !executionResult) {
       if (onAutoExecuteDone) onAutoExecuteDone();
       const el = document.getElementById('pipeline-execution-step3');
