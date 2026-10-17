@@ -88,7 +88,7 @@ export default function ValidationPanel({ dataset, onValidationComplete, disable
       }
 
       // 4. Automatically resume pipeline execution under step 3
-      if (summary.status === 'VALID' || summary.status === 'VALID_WITH_WARNINGS') {
+      if (summary.status === 'VALID' || summary.status === 'VALID_WITH_WARNINGS' || summary.status === 'NEEDS_MAPPING') {
         if (onAutoResumeExecution) {
           onAutoResumeExecution();
         }

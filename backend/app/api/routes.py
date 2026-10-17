@@ -367,9 +367,8 @@ def align_dataset_schema_endpoint(
     db: Session = Depends(get_db)
 ):
     """
-    Intelligently reconciles column aliases (e.g. date -> transaction_date, status -> transaction_status, qty -> quantity),
-    computes missing total_amount if quantity & unit_price exist, standardizes ID prefixes,
-    and imputes missing contract columns with canonical defaults.
+    Intelligently reconciles column aliases (e.g. date -> transaction_date, status -> transaction_status, qty -> quantity,
+    REGD.NO -> registration_number, CRT SEC -> section), standardizes formats, and aligns to the selected contract schema.
     """
     dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
     if not dataset:
@@ -377,11 +376,41 @@ def align_dataset_schema_endpoint(
 
     from app.services.ingestion import UPLOAD_DIR, get_dataset_file_path, read_dataset_df
     from app.services.file_parsers import align_dataframe_schema
+    from app.services.contract_loader import load_contract
 
     file_path, file_type = get_dataset_file_path(dataset_id, db)
     df = read_dataset_df(file_path, file_type)
 
-    aligned_df, added_or_fixed = align_dataframe_schema(df)
+    c_name = (contract_name or "sales").lower()
+    try:
+        contract_data = load_contract(c_name)
+    except Exception:
+        contract_data = load_contract("sales")
+
+    c_type = contract_data.get("contract_type", c_name)
+
+    if c_type == "attendance":
+        # Align attendance column aliases to canonical names
+        schema_spec = contract_data.get("schema", {})
+        rename_map = {}
+        added_or_fixed = []
+        for target_field, field_meta in schema_spec.items():
+            aliases = field_meta.get("aliases", [target_field])
+            for c in df.columns:
+                if c == target_field:
+                    continue
+                clean_c = re.sub(r"[^a-zA-Z0-9]", "", c.lower().strip())
+                for a in aliases:
+                    clean_a = re.sub(r"[^a-zA-Z0-9]", "", a.lower().strip())
+                    if clean_c == clean_a:
+                        rename_map[c] = target_field
+                        added_or_fixed.append(f"{c} ➔ {target_field}")
+                        break
+                if c in rename_map:
+                    break
+        aligned_df = df.rename(rename_map) if rename_map else df
+    else:
+        aligned_df, added_or_fixed = align_dataframe_schema(df)
 
     # Save aligned dataframe directly to normalized CSV path
     norm_path = os.path.join(UPLOAD_DIR, f"{dataset_id}_normalized.csv")

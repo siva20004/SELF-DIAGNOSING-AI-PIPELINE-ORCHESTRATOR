@@ -85,12 +85,18 @@ def validate_dataset(
     for col_name, col_meta in schema_spec.items():
         is_required = col_meta.get("required", False)
         base_aliases = col_meta.get("aliases", [col_name])
-        fragments = HEADER_FRAGMENTS_MAP.get(col_name, [])
+        fragments = HEADER_FRAGMENTS_MAP.get(col_name, []) if contract_type == "sales" else []
         aliases = list(dict.fromkeys(base_aliases + fragments))
         
-        # Check direct presence
-        if col_name in cols:
-            matched_source_cols.add(col_name)
+        # Check direct presence (exact or case/whitespace-insensitive match)
+        direct_match = None
+        for c in cols:
+            if _norm(c) == _norm(col_name):
+                direct_match = c
+                break
+
+        if direct_match:
+            matched_source_cols.add(direct_match)
         else:
             # Check if an alias exists in the source file
             alias_match = None

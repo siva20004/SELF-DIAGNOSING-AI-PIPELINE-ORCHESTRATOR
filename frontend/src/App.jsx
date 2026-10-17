@@ -147,7 +147,8 @@ export default function App() {
   const isStep1Complete = !!dataset;
   const isStep2Complete = validationResult && (
     validationResult.status === 'VALID' || 
-    validationResult.status === 'VALID_WITH_WARNINGS'
+    validationResult.status === 'VALID_WITH_WARNINGS' ||
+    validationResult.status === 'NEEDS_MAPPING'
   );
 
   // If not logged in, show AuthCard
@@ -411,7 +412,7 @@ export default function App() {
             <PipelineExecution
               dataset={dataset}
               validationResult={validationResult}
-              disabled={!dataset || !(validationResult?.status === 'VALID' || validationResult?.status === 'VALID_WITH_WARNINGS')}
+              disabled={!dataset || !(validationResult?.status === 'VALID' || validationResult?.status === 'VALID_WITH_WARNINGS' || validationResult?.status === 'NEEDS_MAPPING')}
               onNavigateToDiagnosis={handleSelectRunForDiagnosis}
               onNavigateToHistory={handleNavigateToHistory}
               autoExecute={shouldAutoExecute}

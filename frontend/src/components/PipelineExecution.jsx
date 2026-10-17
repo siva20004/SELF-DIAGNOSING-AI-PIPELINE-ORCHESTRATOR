@@ -12,7 +12,8 @@ export default function PipelineExecution({ dataset, validationResult, disabled,
 
   const isUnlocked = validationResult && (
     validationResult.status === 'VALID' || 
-    validationResult.status === 'VALID_WITH_WARNINGS'
+    validationResult.status === 'VALID_WITH_WARNINGS' ||
+    validationResult.status === 'NEEDS_MAPPING'
   );
 
   const handleExecute = async () => {
@@ -84,10 +85,15 @@ export default function PipelineExecution({ dataset, validationResult, disabled,
         <div className="execution-action-bar">
           <div className="execution-status-info">
             <span className="exec-meta-label">Contract Pre-Check:</span>
-            {isUnlocked ? (
+            {validationResult?.status === 'VALID' || validationResult?.status === 'VALID_WITH_WARNINGS' ? (
               <span className="badge badge-success font-semibold">
                 <CheckCircle2 size={14} style={{ marginRight: '4px' }} />
                 CONTRACT VALID — READY TO EXECUTE
+              </span>
+            ) : validationResult?.status === 'NEEDS_MAPPING' ? (
+              <span className="badge font-semibold" style={{ background: '#e0f2fe', color: '#0369a1', border: '1px solid #7dd3fc' }}>
+                <CheckCircle2 size={14} style={{ marginRight: '4px' }} />
+                MAPPING READY — UNLOCKED FOR EXECUTION
               </span>
             ) : (
               <span className="badge badge-neutral">
