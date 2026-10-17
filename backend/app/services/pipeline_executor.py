@@ -1,3 +1,4 @@
+import os
 import io
 import json
 import uuid
@@ -252,6 +253,12 @@ def execute_pipeline(dataset_id: str, db: Session) -> PipelineExecutionResponse:
 
         record_task_complete(db_task, "SUCCESS", len(storage_df), len(storage_df))
 
+        # Save durable processed CSV artifact to disk
+        from app.services.ingestion import UPLOAD_DIR
+        processed_csv_name = f"{run_id}_processed_transactions.csv"
+        processed_csv_path = os.path.join(UPLOAD_DIR, processed_csv_name)
+        storage_df.write_csv(processed_csv_path)
+
         # Finalize Pipeline Run
         completed_at = get_ist_now()
         duration = (completed_at - now).total_seconds()
@@ -259,6 +266,7 @@ def execute_pipeline(dataset_id: str, db: Session) -> PipelineExecutionResponse:
         pipeline_run.completed_at = completed_at
         pipeline_run.rows_processed = len(storage_df)
         pipeline_run.rows_rejected = 0
+        pipeline_run.artifact_path = processed_csv_path
         db.commit()
         db.refresh(pipeline_run)
 

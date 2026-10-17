@@ -160,13 +160,25 @@ export default function PipelineResults({ results, dataset }) {
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <a
               href={getDownloadProcessedUrl(run_id)}
-              className="btn btn-secondary btn-sm"
+              className="btn btn-primary btn-sm"
               target="_blank"
               rel="noopener noreferrer"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', textDecoration: 'none' }}
+              download
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: '#16a34a',
+                borderColor: '#15803d',
+                color: '#ffffff',
+                textDecoration: 'none',
+                fontWeight: 600,
+                fontSize: '12.5px',
+                padding: '6px 14px'
+              }}
             >
-              <Download size={13} />
-              Export Results (CSV)
+              <Download size={14} />
+              Download Processed Dataset (CSV)
             </a>
             <span className="badge badge-success-lg">
               <CheckCircle size={16} style={{ marginRight: '6px' }} />

@@ -281,6 +281,17 @@ def execute_recovery(
         except Exception as write_err:
             logs.append(f"Notice: file overwrite: {write_err}")
 
+        # Save durable processed recovery artifact
+        from app.services.ingestion import UPLOAD_DIR
+        processed_csv_name = f"{new_run_id}_processed_transactions.csv"
+        processed_csv_path = os.path.join(UPLOAD_DIR, processed_csv_name)
+        try:
+            current_df.write_csv(processed_csv_path)
+            new_pipeline_run.artifact_path = processed_csv_path
+            logs.append(f"[{format_iso_ist()}] Durable processed artifact saved to {processed_csv_name}")
+        except Exception as p_err:
+            logs.append(f"Notice: processed artifact save: {p_err}")
+
         db.commit()
         db.refresh(recovery_record)
 

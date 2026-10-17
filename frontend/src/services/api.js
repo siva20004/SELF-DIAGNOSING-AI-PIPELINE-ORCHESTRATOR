@@ -95,6 +95,11 @@ export const getRun = async (runId) => {
   return response.data;
 };
 
+export const getRunInspectionDetails = async (runId) => {
+  const response = await client.get(`/api/runs/${runId}/inspection-details`);
+  return response.data;
+};
+
 export const getValidationErrors = async (runId, skip = 0, limit = 200) => {
   const response = await client.get(`/api/runs/${runId}/validation-errors`, {
     params: { skip, limit },

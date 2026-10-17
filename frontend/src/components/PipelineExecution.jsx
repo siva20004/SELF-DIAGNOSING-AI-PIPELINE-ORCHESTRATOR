@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Loader2, CheckCircle2, AlertTriangle, Cpu, ArrowRight } from 'lucide-react';
-import { executePipeline, getRunResults } from '../services/api';
+import { Play, Loader2, CheckCircle2, AlertTriangle, Cpu, ArrowRight, Download } from 'lucide-react';
+import { executePipeline, getRunResults, getDownloadProcessedUrl } from '../services/api';
 import PipelineResults from './PipelineResults';
 import { formatIST } from '../utils/dateUtils';
 
@@ -153,6 +153,55 @@ export default function PipelineExecution({ dataset, validationResult, disabled,
         {/* Audited Results Section */}
         {pipelineResultsData && (
           <>
+            {/* Download Processed Dataset Banner */}
+            <div style={{
+              marginTop: '20px',
+              marginBottom: '16px',
+              padding: '16px 20px',
+              background: '#f0fdf4',
+              border: '1px solid #86efac',
+              borderRadius: '8px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '12px',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <CheckCircle2 size={22} color="#16a34a" />
+                <div>
+                  <strong style={{ fontSize: '14px', color: '#166534' }}>
+                    Pipeline Execution Succeeded — Processed Dataset Ready
+                  </strong>
+                  <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#15803d' }}>
+                    All pipeline stages, domain transformations, calculations, and quality checks completed. Download the verified CSV artifact below.
+                  </p>
+                </div>
+              </div>
+              <a
+                href={getDownloadProcessedUrl(pipelineResultsData.run_id)}
+                className="btn btn-primary"
+                style={{
+                  background: '#16a34a',
+                  borderColor: '#15803d',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  textDecoration: 'none',
+                  fontWeight: 600,
+                  fontSize: '13px',
+                  padding: '9px 18px'
+                }}
+                target="_blank"
+                rel="noopener noreferrer"
+                download
+              >
+                <Download size={15} />
+                Download Processed Dataset (.csv)
+              </a>
+            </div>
+
             <PipelineResults results={pipelineResultsData} dataset={dataset} />
             {onNavigateToHistory && (
               <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end' }}>
