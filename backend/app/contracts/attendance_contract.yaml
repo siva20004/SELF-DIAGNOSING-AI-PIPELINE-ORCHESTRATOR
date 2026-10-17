@@ -1,0 +1,89 @@
+# Student Attendance Data Contract
+dataset: student_attendance
+contract_version: "1.0"
+contract_type: attendance
+
+schema:
+  s_no:
+    type: integer
+    required: false
+    description: "Serial number"
+    aliases: ["S.NO", "SNO", "S_NO", "Sl No", "Sl.No", "Serial No"]
+  
+  name:
+    type: string
+    required: true
+    description: "Student name"
+    aliases: ["NAME", "Student Name", "STUDENT_NAME", "student_name", "StudentName"]
+  
+  registration_number:
+    type: string  
+    required: true
+    unique: true
+    description: "Student registration number"
+    aliases: ["REGD.NO", "REGD NO", "REG.NO", "REG NO", "REGISTRATION_NUMBER", "REGD_NO", "Registration Number", "Reg. No.", "Roll No", "ROLL_NO", "regd.no"]
+  
+  branch:
+    type: string
+    required: false
+    description: "Academic branch"
+    aliases: ["BRANCH", "Branch", "DEPARTMENT", "Dept", "BRANCH_NAME"]
+  
+  department:
+    type: string
+    required: false
+    description: "Department"
+    aliases: ["DEPT", "Dept", "Department", "DEPARTMENT"]
+  
+  vendor:
+    type: string
+    required: false
+    description: "Training vendor"
+    aliases: ["VENDOR", "Vendor"]
+  
+  section:
+    type: string
+    required: false
+    description: "Class section"
+    aliases: ["CRT SEC", "SEC", "Section", "SECTION", "CRT_SEC"]
+  
+  room:
+    type: string
+    required: false
+    description: "Classroom"
+    aliases: ["CRT ROOM", "ROOM", "Room", "CRT_ROOM"]
+  
+  status:
+    type: string
+    required: false
+    description: "Student status"
+    aliases: ["STATUS", "Status"]
+
+attendance_config:
+  session_markers:
+    present: ["P", "p", "Present", "PRESENT", "1"]
+    absent: ["A", "a", "Absent", "ABSENT", "0"]
+    not_applicable: ["NA", "N/A", "-", "", "Holiday", "HOLIDAY", "Cancelled", "CANCELLED", "None", "null"]
+  
+  session_column_patterns:
+    - "^\\d{1,2}:\\d{2}\\s*-\\s*\\d{1,2}:\\d{2}$"  # Time ranges like "09:20-10:10"
+    - "^Session\\s*\\d+$"                             # Session 1, Session 2...
+    - "^S\\d+$"                                        # S1, S2...
+    - "^Period\\s*\\d+$"                               # Period 1, Period 2...
+    - "^P\\d+$"                                        # P1, P2...
+  
+  summary_columns:
+    total_conducted: ["Total Conducted", "TOTAL CONDUCTED", "Total_Conducted", "Conducted", "TOTAL_CONDUCTED"]
+    total_attended: ["Total Attended", "TOTAL ATTENDED", "Total_Attended", "Attended", "TOTAL_ATTENDED"]
+    attendance_percentage: ["Att (%)", "ATT(%)", "Att(%)", "Attendance %", "ATTENDANCE_PERCENTAGE", "Att Percentage", "Attendance_Percentage", "4-1\nAtt(%)", "4-1 Att(%)"]
+
+  formulas:
+    total_conducted: "count of sessions where marker is not in not_applicable list"
+    total_attended: "count of sessions marked present"
+    attendance_percentage: "(total_attended / total_conducted) * 100 if total_conducted > 0 else null"
+
+quality_rules:
+  registration_number_unique: true
+  null_names_allowed: false
+  validate_attendance_markers: true
+  recalculate_totals: true

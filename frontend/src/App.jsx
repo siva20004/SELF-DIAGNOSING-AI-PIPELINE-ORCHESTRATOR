@@ -10,6 +10,7 @@ import MonitoringAndExperiments from './components/MonitoringAndExperiments';
 import AuthCard from './components/AuthCard';
 import UserAuditModal from './components/UserAuditModal';
 import { recordVisit, logOutUser } from './services/api';
+import { formatIST } from './utils/dateUtils';
 import './App.css';
 
 // 30 minutes in milliseconds
@@ -54,7 +55,7 @@ export default function App() {
       details: {
         screen: `${window.innerWidth}x${window.innerHeight}`,
         referrer: document.referrer || 'Direct Visit',
-        time: new Date().toISOString()
+        time: formatIST(new Date().toISOString())
       }
     });
   }, [currentUser?.id]);
@@ -143,7 +144,10 @@ export default function App() {
   };
 
   const isStep1Complete = !!dataset;
-  const isStep2Complete = validationResult && validationResult.status === 'VALID';
+  const isStep2Complete = validationResult && (
+    validationResult.status === 'VALID' || 
+    validationResult.status === 'VALID_WITH_WARNINGS'
+  );
 
   // If not logged in, show AuthCard
   if (!currentUser) {
@@ -245,7 +249,7 @@ export default function App() {
             </span>
             <span className="badge badge-meta">
               <ShieldCheck size={13} style={{ marginRight: '5px' }} />
-              sales_contract_v1.yaml (v1.0)
+              {validationResult?.contract_name ? `${validationResult.contract_name} (v1.0)` : dataset?.suggested_contract ? `${dataset.suggested_contract}_contract.yaml` : 'Multi-Contract Engine (v1.0)'}
             </span>
             <button
               type="button"
@@ -403,7 +407,7 @@ export default function App() {
             <PipelineExecution
               dataset={dataset}
               validationResult={validationResult}
-              disabled={!dataset || validationResult?.status !== 'VALID'}
+              disabled={!dataset || !(validationResult?.status === 'VALID' || validationResult?.status === 'VALID_WITH_WARNINGS')}
               onNavigateToDiagnosis={handleSelectRunForDiagnosis}
               onNavigateToHistory={handleNavigateToHistory}
             />

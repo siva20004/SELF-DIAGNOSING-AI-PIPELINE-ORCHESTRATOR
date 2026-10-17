@@ -16,6 +16,7 @@ from app.models.models import (
     BackfillPlanRecord,
     ScheduleRecord,
 )
+from app.services.time_utils import get_ist_now
 from app.schemas.schemas import ScheduleResponse
 
 
@@ -146,7 +147,7 @@ def compute_cost_aware_schedule(
         baseline_comparison_json=json.dumps(baseline_comparison),
         selection_rationale=rationale,
         status="SCHEDULED",
-        created_at=datetime.datetime.utcnow(),
+        created_at=get_ist_now(),
     )
 
     db.add(sched_record)

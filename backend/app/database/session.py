@@ -37,6 +37,10 @@ connect_args = {}
 if "sslmode=require" in DATABASE_URL:
     connect_args["sslmode"] = "require"
 
+# Force PostgreSQL to operate strictly in Indian Standard Time (Asia/Kolkata)
+if "sqlite" not in DATABASE_URL:
+    connect_args["options"] = "-c timezone=Asia/Kolkata"
+
 engine = create_engine(
     DATABASE_URL,
     pool_size=5,
@@ -90,6 +94,23 @@ def init_db():
             timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
         );""",
     ]
+
+    # Adjust any historical UTC timestamps in cloud database (Neon) from earlier runs
+    if "localhost" not in RAW_DATABASE_URL and "127.0.0.1" not in RAW_DATABASE_URL:
+        migrations.append("""
+            UPDATE pipeline_runs 
+            SET started_at = started_at + INTERVAL '5 hours 30 minutes',
+                completed_at = CASE WHEN completed_at IS NOT NULL THEN completed_at + INTERVAL '5 hours 30 minutes' ELSE NULL END
+            WHERE started_at >= '2026-10-17 00:00:00' 
+              AND started_at < '2026-10-17 08:00:00';
+        """)
+        migrations.append("""
+            UPDATE user_activities 
+            SET timestamp = timestamp + INTERVAL '5 hours 30 minutes'
+            WHERE timestamp >= '2026-10-17 00:00:00' 
+              AND timestamp < '2026-10-17 08:00:00';
+        """)
+
     for stmt in migrations:
         try:
             with engine.begin() as conn:

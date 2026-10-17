@@ -2,8 +2,7 @@ import uuid
 import re
 import os
 import json
-import datetime
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, Query, Request
 from sqlalchemy.orm import Session
@@ -48,9 +47,24 @@ from app.schemas.schemas import (
     ExperimentResponse,
 )
 from app.services.ingestion import handle_file_upload, get_dataset_preview, get_dataset_file_path
-from app.services.contract_loader import load_contract
+from app.services.contract_loader import (
+    load_contract,
+    list_available_contracts,
+    detect_contract_for_columns,
+)
 from app.services.validator import validate_dataset
 from app.services.pipeline_executor import execute_pipeline, get_pipeline_results
+from app.services.attendance_executor import execute_attendance_pipeline
+from app.services.correction_engine import (
+    analyze_dataset_corrections,
+    apply_dataset_corrections,
+)
+from app.schemas.schemas import (
+    DataCorrectionProposal,
+    DataCorrectionAnalysisResponse,
+    ApplyCorrectionsRequest,
+    ApplyCorrectionsResponse,
+)
 from app.services.auth import (
     register_user,
     login_user,
@@ -65,7 +79,44 @@ from app.services.scheduler import compute_cost_aware_schedule, approve_schedule
 from app.services.recovery_executor import execute_recovery
 from app.services.monitoring_experiments import get_monitoring_dashboard, run_reproducible_experiment, EXPERIMENTS_DIR
 
+IST = timezone(timedelta(hours=5, minutes=30), name="IST")
+
+def get_ist_now():
+    """Returns current datetime in Indian Standard Time (IST, UTC+05:30)."""
+    return datetime.now(IST).replace(tzinfo=None)
+
 router = APIRouter(prefix="/api", tags=["Pipeline Orchestrator"])
+
+
+# ==========================================
+# CONTRACT DISCOVERY & AUTO-DETECTION
+# ==========================================
+
+@router.get("/contracts")
+def get_contracts():
+    """Returns all available YAML contracts with metadata."""
+    return list_available_contracts()
+
+
+@router.get("/contracts/{contract_name}")
+def get_contract_detail(contract_name: str):
+    """Retrieves full specification of a data contract."""
+    try:
+        return load_contract(contract_name)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get("/datasets/{dataset_id}/detect-contract")
+def detect_dataset_contract(dataset_id: str, db: Session = Depends(get_db)):
+    """
+    Inspects actual columns of an uploaded dataset and recommends the most
+    suitable data contract (sales, attendance, generic) with match evidence.
+    """
+    file_path, file_type = get_dataset_file_path(dataset_id, db)
+    import polars as pl
+    df_head = pl.read_csv(file_path, n_rows=5, infer_schema_length=0)
+    return detect_contract_for_columns(list(df_head.columns))
 
 
 @router.post("/datasets/upload", response_model=DatasetUploadResponse)
@@ -175,18 +226,27 @@ def get_preview(
 @router.post("/datasets/{dataset_id}/validate", response_model=ValidationSummary)
 def validate_dataset_endpoint(
     dataset_id: str,
+    contract_name: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
     """
-    Validates the dataset against the YAML data contract.
-    Records errors in PostgreSQL and returns exact check summary.
+    Validates the dataset against the specified (or auto-detected) YAML data contract.
+    Records errors in PostgreSQL with IST timestamps and returns exact check summary.
     """
     dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
     if not dataset:
         raise HTTPException(status_code=404, detail=f"Dataset {dataset_id} not found")
 
     file_path, file_type = get_dataset_file_path(dataset_id, db)
-    contract_data = load_contract()
+
+    # If no contract specified by user, auto-detect based on actual uploaded columns
+    if not contract_name or contract_name.lower() in ("auto", "default", "none"):
+        import polars as pl
+        df_head = pl.read_csv(file_path, n_rows=5, infer_schema_length=0)
+        detection = detect_contract_for_columns(list(df_head.columns))
+        contract_name = detection["suggested_contract"]
+
+    contract_data = load_contract(contract_name)
 
     # Create a unique validation run ID
     val_run_id = f"VAL-{uuid.uuid4().hex[:10].upper()}"
@@ -196,22 +256,24 @@ def validate_dataset_endpoint(
         file_type=file_type,
         run_id=val_run_id,
         db=db,
-        contract_data=contract_data
+        contract_data=contract_data,
+        contract_name=contract_name
     )
 
     if summary.status == "INVALID":
         from app.services.run_history import compute_file_fingerprint
         from app.services.diagnosis_engine import create_or_get_failure_diagnosis
 
-        now = datetime.utcnow()
+        now_ist = get_ist_now()
+        pipeline_title = "Student_Attendance_Pipeline" if contract_name == "attendance" else "Sales_Transaction_Pipeline"
         err_msg = f"Contract validation failed: {summary.validation_errors_count} violation(s) across {summary.rows_invalid} row(s)."
         failed_run = PipelineRun(
             run_id=val_run_id,
-            pipeline_name="Sales_Transaction_Pipeline",
+            pipeline_name=pipeline_title,
             dataset_id=dataset_id,
             contract_version=summary.contract_version,
-            started_at=now,
-            completed_at=now,
+            started_at=now_ist,
+            completed_at=now_ist,
             status="FAILED",
             rows_received=summary.rows_received,
             rows_valid=summary.rows_valid,
@@ -220,7 +282,7 @@ def validate_dataset_endpoint(
             rows_rejected=summary.rows_invalid,
             file_format=file_type,
             dataset_fingerprint=compute_file_fingerprint(file_path),
-            config_json=json.dumps({"pipeline": "sales_contract_validation", "contract": "sales_contract_v1.yaml"}),
+            config_json=json.dumps({"pipeline": pipeline_title, "contract": contract_name}),
             artifact_path=file_path,
             error_message=err_msg
         )
@@ -230,8 +292,8 @@ def validate_dataset_endpoint(
             run_id=val_run_id,
             task_name="VALIDATION",
             status="FAILED",
-            started_at=now,
-            completed_at=now,
+            started_at=now_ist,
+            completed_at=now_ist,
             rows_input=summary.rows_received,
             rows_output=summary.rows_valid,
             error_message=err_msg
@@ -245,6 +307,57 @@ def validate_dataset_endpoint(
             print(f"Auto-diagnosis notice: {diag_err}")
 
     return summary
+
+
+# ==========================================
+# INTERACTIVE DATA CORRECTION WORKFLOW
+# ==========================================
+
+@router.get("/datasets/{dataset_id}/corrections/analyze", response_model=DataCorrectionAnalysisResponse)
+def analyze_corrections_endpoint(
+    dataset_id: str,
+    contract_name: Optional[str] = Query("sales"),
+    db: Session = Depends(get_db)
+):
+    """
+    Analyzes an uploaded dataset against the contract and proposes specific corrections
+    (column mappings, marker standardizations, whitespace trims, date conversions)
+    with before/after preview samples. Does NOT alter any data.
+    """
+    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+    if not dataset:
+        raise HTTPException(status_code=404, detail=f"Dataset {dataset_id} not found")
+
+    file_path, file_type = get_dataset_file_path(dataset_id, db)
+    return analyze_dataset_corrections(file_path, file_type, contract_name=contract_name)
+
+
+@router.post("/datasets/{dataset_id}/corrections/apply", response_model=ApplyCorrectionsResponse)
+def apply_corrections_endpoint(
+    dataset_id: str,
+    req: ApplyCorrectionsRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Applies user-approved corrections to create a separate corrected dataset file.
+    The original uploaded file is NEVER modified.
+    """
+    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+    if not dataset:
+        raise HTTPException(status_code=404, detail=f"Dataset {dataset_id} not found")
+
+    from app.services.ingestion import UPLOAD_DIR
+    raw_path, file_type = get_dataset_file_path(dataset_id, db)
+    corrected_path = os.path.join(UPLOAD_DIR, f"{dataset_id}_corrected.csv")
+
+    result = apply_dataset_corrections(raw_path, corrected_path, req.approved_fixes)
+
+    # Update dataset record metadata to match corrected dimensions
+    dataset.rows_count = result["corrected_rows"]
+    dataset.columns_count = result["corrected_columns_count"]
+    db.commit()
+
+    return result
 
 
 @router.post("/datasets/{dataset_id}/align-schema")
@@ -343,16 +456,32 @@ def get_validation_errors(
     return [ValidationErrorItem.model_validate(e) for e in errors]
 
 
-@router.post("/datasets/{dataset_id}/execute", response_model=PipelineExecutionResponse)
+@router.post("/datasets/{dataset_id}/execute")
 def execute_pipeline_endpoint(
     dataset_id: str,
+    contract_name: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
     """
-    Executes the 7 pipeline stages sequentially:
-    Validation -> Cleaning -> Transformation -> Calculation -> Aggregation -> Quality Check -> DB Storage
+    Executes the real processing pipeline stages sequentially:
+    Supports Sales pipeline and Attendance pipeline with 100% real calculations.
     """
-    return execute_pipeline(dataset_id, db)
+    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+    if not dataset:
+        raise HTTPException(status_code=404, detail=f"Dataset {dataset_id} not found")
+
+    file_path, file_type = get_dataset_file_path(dataset_id, db)
+
+    if not contract_name or contract_name.lower() in ("auto", "default", "none"):
+        import polars as pl
+        df_head = pl.read_csv(file_path, n_rows=5, infer_schema_length=0)
+        det = detect_contract_for_columns(list(df_head.columns))
+        contract_name = det["suggested_contract"]
+
+    if contract_name == "attendance":
+        return execute_attendance_pipeline(dataset_id, db, contract_name="attendance")
+    else:
+        return execute_pipeline(dataset_id, db)
 
 
 @router.get("/runs/{run_id}/tasks", response_model=List[PipelineTaskItem])
@@ -367,13 +496,54 @@ def get_run_tasks(
     return [PipelineTaskItem.model_validate(t) for t in tasks]
 
 
-@router.get("/runs/{run_id}/results", response_model=PipelineResultsResponse)
+@router.get("/runs/{run_id}/results")
 def get_run_results(
     run_id: str,
     db: Session = Depends(get_db)
 ):
-    """Retrieves final calculated metrics, city/category/date aggregates, and tasks."""
+    """Retrieves final calculated metrics, aggregates, and tasks (sales or attendance)."""
+    run = db.query(PipelineRun).filter(PipelineRun.run_id == run_id).first()
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Pipeline run {run_id} not found")
+
+    if run.pipeline_name == "Student_Attendance_Pipeline" or (run.config_json and "attendance" in run.config_json):
+        from app.services.attendance_executor import execute_attendance_pipeline
+        return execute_attendance_pipeline(run.dataset_id, db, contract_name="attendance")
+
     return get_pipeline_results(run_id, db)
+
+
+# ==========================================
+# EXPORT & DOWNLOAD ENDPOINTS
+# ==========================================
+
+@router.get("/runs/{run_id}/download/processed")
+def download_processed_dataset(run_id: str, db: Session = Depends(get_db)):
+    """Downloads the final processed dataset as CSV."""
+    from fastapi.responses import FileResponse
+    run = db.query(PipelineRun).filter(PipelineRun.run_id == run_id).first()
+    if not run or not run.artifact_path or not os.path.exists(run.artifact_path):
+        raise HTTPException(status_code=404, detail="Processed output artifact file not found.")
+    filename = f"{run.run_id}_processed_dataset.csv"
+    return FileResponse(run.artifact_path, filename=filename, media_type="text/csv")
+
+
+@router.get("/runs/{run_id}/download/validation-errors")
+def download_validation_errors(run_id: str, db: Session = Depends(get_db)):
+    """Downloads all recorded validation errors as a structured CSV report."""
+    from fastapi.responses import Response
+    import io, csv
+    errors = db.query(ValidationErrorRecord).filter(ValidationErrorRecord.run_id == run_id).all()
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["Row Number", "Column Name", "Error Type", "Actual Value", "Expected Rule", "Severity", "Timestamp"])
+    for e in errors:
+        writer.writerow([e.row_number, e.column_name, e.error_type, e.actual_value, e.expected_rule, e.severity, str(e.created_at)])
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={run_id}_validation_errors.csv"}
+    )
 
 
 # ==========================================

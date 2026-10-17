@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Play, Loader2, CheckCircle2, AlertTriangle, Cpu, ArrowRight } from 'lucide-react';
 import { executePipeline, getRunResults } from '../services/api';
 import PipelineResults from './PipelineResults';
+import { formatIST } from '../utils/dateUtils';
 
 export default function PipelineExecution({ dataset, validationResult, disabled, onNavigateToDiagnosis, onNavigateToHistory }) {
   const [executing, setExecuting] = useState(false);
@@ -9,7 +10,10 @@ export default function PipelineExecution({ dataset, validationResult, disabled,
   const [pipelineResultsData, setPipelineResultsData] = useState(null);
   const [executionError, setExecutionError] = useState(null);
 
-  const isUnlocked = validationResult && validationResult.status === 'VALID';
+  const isUnlocked = validationResult && (
+    validationResult.status === 'VALID' || 
+    validationResult.status === 'VALID_WITH_WARNINGS'
+  );
 
   const handleExecute = async () => {
     if (!dataset?.dataset_id || !isUnlocked) return;
@@ -17,8 +21,10 @@ export default function PipelineExecution({ dataset, validationResult, disabled,
     setExecuting(true);
     setExecutionError(null);
 
+    const contractToExecute = validationResult?.contract_name || validationResult?.contract_type || dataset?.suggested_contract || 'attendance';
+
     try {
-      const execRes = await executePipeline(dataset.dataset_id);
+      const execRes = await executePipeline(dataset.dataset_id, contractToExecute);
       setExecutionResult(execRes);
 
       // Fetch comprehensive calculated results from database
@@ -31,7 +37,7 @@ export default function PipelineExecution({ dataset, validationResult, disabled,
         message: typeof detail === 'string' ? detail : err.message || 'Pipeline execution failed',
         status: err.response?.status || 500,
         runId: err.response?.data?.run_id || 'N/A',
-        timestamp: new Date().toISOString(),
+        timestamp: formatIST(new Date().toISOString()),
       });
     } finally {
       setExecuting(false);

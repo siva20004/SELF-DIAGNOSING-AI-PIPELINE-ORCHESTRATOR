@@ -27,6 +27,7 @@ from app.models.models import (
     RecoveryRunRecord,
     ExperimentRecord,
 )
+from app.services.time_utils import get_ist_now, get_ist_timestamp_str
 from app.schemas.schemas import (
     MonitoringDashboardResponse,
     ExperimentResponse,
@@ -103,7 +104,7 @@ def run_reproducible_experiment(
     Exports the raw trials as CSV and returns comparative metrics.
     """
     experiment_id = f"EXP-{uuid.uuid4().hex[:8].upper()}"
-    timestamp = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    timestamp = get_ist_timestamp_str("%Y%m%d_%H%M%S")
     csv_filename = f"{experiment_id}_{experiment_type}_{timestamp}.csv"
     csv_path = os.path.join(EXPERIMENTS_DIR, csv_filename)
 
@@ -251,7 +252,7 @@ def run_reproducible_experiment(
         baseline_metrics_json=json.dumps(baseline_metrics),
         proposed_metrics_json=json.dumps(proposed_metrics),
         raw_csv_path=csv_path,
-        created_at=datetime.datetime.utcnow(),
+        created_at=get_ist_now(),
     )
     db.add(record)
     db.commit()

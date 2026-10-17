@@ -15,6 +15,7 @@ from app.models.models import (
     PipelineTask,
     SalesAggregate,
 )
+from app.services.time_utils import get_ist_now, get_ist_timestamp_str
 from app.schemas.schemas import (
     PipelineExecutionResponse,
     PipelineTaskItem,
@@ -44,8 +45,8 @@ def execute_pipeline(dataset_id: str, db: Session) -> PipelineExecutionResponse:
     contract_version = str(contract_data.get("contract_version", "1.0"))
 
     # Generate dynamic unique run_id e.g. RUN-YYYYMMDD-HHMMSS-XXXX
-    now = datetime.datetime.utcnow()
-    run_id = f"RUN-{now.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6].upper()}"
+    now = get_ist_now()
+    run_id = f"RUN-{get_ist_timestamp_str()}-{uuid.uuid4().hex[:6].upper()}"
 
     # Calculate dataset fingerprint and config metadata
     from app.services.run_history import compute_file_fingerprint
@@ -85,7 +86,7 @@ def execute_pipeline(dataset_id: str, db: Session) -> PipelineExecutionResponse:
             run_id=run_id,
             task_name=task_name,
             status="RUNNING",
-            started_at=datetime.datetime.utcnow(),
+            started_at=get_ist_now(),
             rows_input=0,
             rows_output=0,
         )
@@ -96,7 +97,7 @@ def execute_pipeline(dataset_id: str, db: Session) -> PipelineExecutionResponse:
 
     def record_task_complete(task: PipelineTask, status: str, rows_in: int, rows_out: int, err: str = None):
         task.status = status
-        task.completed_at = datetime.datetime.utcnow()
+        task.completed_at = get_ist_now()
         task.rows_input = rows_in
         task.rows_output = rows_out
         task.error_message = err
@@ -118,7 +119,7 @@ def execute_pipeline(dataset_id: str, db: Session) -> PipelineExecutionResponse:
                 err=f"Data contract validation failed: {val_summary.validation_errors_count} errors across {val_summary.rows_invalid} rows."
             )
             pipeline_run.status = "FAILED"
-            pipeline_run.completed_at = datetime.datetime.utcnow()
+            pipeline_run.completed_at = get_ist_now()
             pipeline_run.rows_valid = val_summary.rows_valid
             pipeline_run.rows_invalid = val_summary.rows_invalid
             pipeline_run.rows_rejected = val_summary.rows_invalid
@@ -170,7 +171,7 @@ def execute_pipeline(dataset_id: str, db: Session) -> PipelineExecutionResponse:
             err_msg = "; ".join(qc_result["violations"])
             record_task_complete(qc_task, "FAILED", len(calc_df), 0, err=err_msg)
             pipeline_run.status = "FAILED"
-            pipeline_run.completed_at = datetime.datetime.utcnow()
+            pipeline_run.completed_at = get_ist_now()
             pipeline_run.error_message = err_msg
             db.commit()
             raise HTTPException(status_code=500, detail=f"Pipeline final quality check failed: {err_msg}")
@@ -252,7 +253,7 @@ def execute_pipeline(dataset_id: str, db: Session) -> PipelineExecutionResponse:
         record_task_complete(db_task, "SUCCESS", len(storage_df), len(storage_df))
 
         # Finalize Pipeline Run
-        completed_at = datetime.datetime.utcnow()
+        completed_at = get_ist_now()
         duration = (completed_at - now).total_seconds()
         pipeline_run.status = "SUCCESS"
         pipeline_run.completed_at = completed_at
@@ -292,7 +293,7 @@ def execute_pipeline(dataset_id: str, db: Session) -> PipelineExecutionResponse:
             failed_run = db.query(PipelineRun).filter(PipelineRun.run_id == run_id).first()
             if failed_run:
                 failed_run.status = "FAILED"
-                failed_run.completed_at = datetime.datetime.utcnow()
+                failed_run.completed_at = get_ist_now()
                 failed_run.error_message = str(e)
                 db.commit()
         except Exception as db_err:

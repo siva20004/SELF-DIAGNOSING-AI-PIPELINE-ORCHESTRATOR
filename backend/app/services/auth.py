@@ -5,6 +5,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from app.models.models import User
 from app.schemas.schemas import UserRegisterRequest, UserLoginRequest, UserResponse, AuthResponse
+from app.services.time_utils import get_ist_now
 
 
 def hash_password(password: str) -> str:
@@ -35,7 +36,7 @@ def register_user(db: Session, data: UserRegisterRequest, ip: str = None, user_a
         raise HTTPException(status_code=400, detail="An account with this email already exists.")
 
     hashed = hash_password(data.password)
-    now = datetime.utcnow()
+    now = get_ist_now()
     user = User(
         first_name=data.first_name.strip(),
         last_name=data.last_name.strip(),
@@ -84,7 +85,7 @@ def login_user(db: Session, data: UserLoginRequest, ip: str = None, user_agent: 
     if not user or not verify_password(data.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid email or password.")
 
-    now = datetime.utcnow()
+    now = get_ist_now()
     user.login_count = (user.login_count or 0) + 1
     user.visit_count = (user.visit_count or 0) + 1
     user.last_login_at = now
@@ -130,7 +131,7 @@ def record_user_activity(
 ):
     """Persists a real user audit trail entry into user_activities in PostgreSQL/Neon."""
     from app.models.models import UserActivity
-    now = datetime.utcnow()
+    now = get_ist_now()
     user = None
     if user_id:
         user = db.query(User).filter(User.id == user_id).first()

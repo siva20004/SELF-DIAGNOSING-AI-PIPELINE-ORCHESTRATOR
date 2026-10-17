@@ -1,6 +1,7 @@
 # Sales Transaction Data Contract
 dataset: sales_transactions
 contract_version: "1.0"
+contract_type: sales
 
 schema:
   transaction_id:

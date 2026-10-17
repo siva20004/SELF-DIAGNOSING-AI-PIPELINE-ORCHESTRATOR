@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { History, Eye, FileText, CheckCircle2, XCircle, Clock, Database, Download, RefreshCw, AlertTriangle } from 'lucide-react';
 import { listRuns, getRunArtifacts, getRunLogs } from '../services/api';
+import { formatIST } from '../utils/dateUtils';
 
 export default function RunHistory({ onSelectRunForDiagnosis }) {
   const [runs, setRuns] = useState([]);
@@ -99,7 +100,7 @@ export default function RunHistory({ onSelectRunForDiagnosis }) {
                 <th style={{ padding: '10px 12px' }}>Run ID</th>
                 <th style={{ padding: '10px 12px' }}>Format</th>
                 <th style={{ padding: '10px 12px' }}>Dataset / File</th>
-                <th style={{ padding: '10px 12px' }}>Started At</th>
+                <th style={{ padding: '10px 12px' }}>Started At (IST)</th>
                 <th style={{ padding: '10px 12px' }}>Duration</th>
                 <th style={{ padding: '10px 12px' }}>Processed</th>
                 <th style={{ padding: '10px 12px' }}>Status</th>
@@ -124,7 +125,7 @@ export default function RunHistory({ onSelectRunForDiagnosis }) {
                       {r.filename}
                     </td>
                     <td style={{ padding: '10px 12px', color: '#64748b' }}>
-                      {r.started_at ? new Date(r.started_at).toLocaleString() : 'N/A'}
+                      {formatIST(r.started_at)}
                     </td>
                     <td style={{ padding: '10px 12px' }}>
                       {r.duration_seconds ? `${r.duration_seconds}s` : '-'}

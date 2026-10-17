@@ -1,0 +1,18 @@
+# Generic Tabular Dataset Contract
+dataset: generic_tabular
+contract_version: "1.0"
+contract_type: generic
+
+schema: {}
+
+quality_rules:
+  null_values_allowed: true
+  auto_detect_types: true
+  profile_data: true
+
+data_profiling:
+  detect_column_types: true
+  detect_unique_columns: true
+  detect_date_columns: true
+  detect_numeric_columns: true
+  sample_size: 100

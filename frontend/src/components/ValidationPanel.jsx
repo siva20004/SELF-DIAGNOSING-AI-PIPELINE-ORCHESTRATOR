@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { ShieldCheck, ShieldX, Play, FileCode, CheckCircle, AlertTriangle, ArrowRight, Loader2, CalendarCog, Wrench, AlertOctagon } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ShieldCheck, ShieldX, Play, FileCode, CheckCircle, AlertTriangle, ArrowRight, Loader2, CalendarCog, Wrench, AlertOctagon, Sparkles } from 'lucide-react';
 import { validateDataset, fixDateFormat, alignSchema } from '../services/api';
 import ValidationErrors from './ValidationErrors';
+import DataCorrectionModal from './DataCorrectionModal';
 
 export default function ValidationPanel({ dataset, onValidationComplete, disabled, onNavigateToDiagnosis }) {
   const [validating, setValidating] = useState(false);
@@ -11,15 +12,26 @@ export default function ValidationPanel({ dataset, onValidationComplete, disable
   const [dateFixResult, setDateFixResult] = useState(null);
   const [aligningSchema, setAligningSchema] = useState(false);
   const [alignResult, setAlignResult] = useState(null);
+  const [isCorrectionModalOpen, setIsCorrectionModalOpen] = useState(false);
 
-  const handleValidate = async () => {
+  // Active contract selection (defaults to suggested_contract if present)
+  const [contractName, setContractName] = useState('attendance');
+
+  useEffect(() => {
+    if (dataset?.suggested_contract) {
+      setContractName(dataset.suggested_contract);
+    }
+  }, [dataset?.dataset_id, dataset?.suggested_contract]);
+
+  const handleValidate = async (targetContract = null) => {
     if (!dataset?.dataset_id) return;
     setValidating(true);
     setErrorMsg(null);
     setDateFixResult(null);
 
+    const activeContract = targetContract || contractName;
     try {
-      const result = await validateDataset(dataset.dataset_id);
+      const result = await validateDataset(dataset.dataset_id, activeContract);
       setValidationResult(result);
       onValidationComplete(result);
     } catch (err) {
@@ -118,44 +130,107 @@ export default function ValidationPanel({ dataset, onValidationComplete, disable
 
       <div className="section-body">
         {/* Contract Info Box */}
-        <div className="contract-info-bar">
-          <div className="contract-meta-item">
-            <FileCode size={18} className="text-muted" />
-            <div>
-              <span className="meta-caption">Active Contract:</span>
-              <span className="meta-highlight">sales_contract_v1.yaml</span>
+        <div className="contract-info-bar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+            <div className="contract-meta-item">
+              <FileCode size={18} className="text-muted" />
+              <div>
+                <span className="meta-caption">Selected Data Contract:</span>
+                <select
+                  value={contractName}
+                  onChange={(e) => {
+                    const newC = e.target.value;
+                    setContractName(newC);
+                    if (dataset) handleValidate(newC);
+                  }}
+                  style={{
+                    marginLeft: '6px',
+                    padding: '4px 8px',
+                    fontSize: '12.5px',
+                    fontWeight: 600,
+                    borderRadius: '6px',
+                    border: '1px solid #cbd5e1',
+                    background: '#ffffff',
+                    color: '#0f172a',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="attendance">Student Attendance (attendance_contract.yaml)</option>
+                  <option value="sales">Sales Transactions (sales_contract_v1.yaml)</option>
+                  <option value="generic">Generic Tabular (generic_contract.yaml)</option>
+                </select>
+              </div>
             </div>
-          </div>
-          <div className="contract-meta-item">
-            <div>
-              <span className="meta-caption">Version:</span>
-              <span className="meta-highlight">1.0</span>
+            <div className="contract-meta-item">
+              <div>
+                <span className="meta-caption">Scope:</span>
+                <span className="meta-highlight">
+                  {contractName === 'attendance' ? 'student_attendance' : contractName === 'sales' ? 'sales_transactions' : 'generic_tabular'}
+                </span>
+              </div>
             </div>
-          </div>
-          <div className="contract-meta-item">
-            <div>
-              <span className="meta-caption">Dataset Scope:</span>
-              <span className="meta-highlight">sales_transactions</span>
-            </div>
-          </div>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={handleValidate}
-            disabled={disabled || validating || !dataset}
-          >
-            {validating ? (
-              <>
-                <Loader2 size={16} className="spinner" style={{ marginRight: '6px' }} />
-                Validating Dataset against Contract...
-              </>
-            ) : (
-              <>
-                <ShieldCheck size={16} style={{ marginRight: '6px' }} />
-                Validate Dataset
-              </>
+            {dataset?.suggested_contract && (
+              <span style={{
+                fontSize: '11px',
+                padding: '3px 8px',
+                borderRadius: '12px',
+                background: '#e0f2fe',
+                color: '#0369a1',
+                fontWeight: 600,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}>
+                <Sparkles size={12} />
+                Auto-Detected: {dataset.suggested_contract}
+              </span>
             )}
-          </button>
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            {validationResult && (validationResult.status === 'NEEDS_MAPPING' || validationResult.status === 'INVALID' || (validationResult.mappable_columns && Object.keys(validationResult.mappable_columns).length > 0)) && (
+              <button
+                type="button"
+                className="btn btn-warning"
+                onClick={() => setIsCorrectionModalOpen(true)}
+                style={{
+                  background: '#f59e0b',
+                  borderColor: '#d97706',
+                  color: '#ffffff',
+                  fontWeight: 600,
+                  fontSize: '13px',
+                  padding: '7px 14px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  borderRadius: '6px'
+                }}
+              >
+                <Wrench size={15} />
+                Review and Fix Data
+              </button>
+            )}
+
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => handleValidate()}
+              disabled={disabled || validating || !dataset}
+              style={{ fontSize: '13px', padding: '7px 16px' }}
+            >
+              {validating ? (
+                <>
+                  <Loader2 size={16} className="spinner" style={{ marginRight: '6px' }} />
+                  Validating against {contractName}...
+                </>
+              ) : (
+                <>
+                  <ShieldCheck size={16} style={{ marginRight: '6px' }} />
+                  Validate Dataset
+                </>
+              )}
+            </button>
+          </div>
         </div>
 
         {errorMsg && (
@@ -173,8 +248,28 @@ export default function ValidationPanel({ dataset, onValidationComplete, disable
             <div className="summary-banner-row">
               <div className="summary-status-pill">
                 <span className="summary-pill-label">Contract Status</span>
-                <span className={`status-badge-large ${validationResult.status === 'VALID' ? 'status-valid' : 'status-invalid'}`}>
-                  {validationResult.status}
+                <span className={`status-badge-large ${
+                  validationResult.status === 'VALID' ? 'status-valid' : 
+                  validationResult.status === 'VALID_WITH_WARNINGS' ? 'status-warning' :
+                  validationResult.status === 'NEEDS_MAPPING' ? 'status-needs-mapping' : 'status-invalid'
+                }`} style={{
+                  padding: '6px 14px',
+                  borderRadius: '6px',
+                  fontWeight: 700,
+                  fontSize: '13px',
+                  background: validationResult.status === 'VALID' ? '#dcfce7' :
+                              validationResult.status === 'VALID_WITH_WARNINGS' ? '#fef3c7' :
+                              validationResult.status === 'NEEDS_MAPPING' ? '#e0f2fe' : '#fee2e2',
+                  color: validationResult.status === 'VALID' ? '#166534' :
+                         validationResult.status === 'VALID_WITH_WARNINGS' ? '#b45309' :
+                         validationResult.status === 'NEEDS_MAPPING' ? '#0369a1' : '#b91c1c',
+                  border: `1px solid ${
+                    validationResult.status === 'VALID' ? '#86efac' :
+                    validationResult.status === 'VALID_WITH_WARNINGS' ? '#fcd34d' :
+                    validationResult.status === 'NEEDS_MAPPING' ? '#7dd3fc' : '#fca5a5'
+                  }`
+                }}>
+                  {validationResult.status.replace(/_/g, ' ')}
                 </span>
               </div>
               <div className="summary-stat-group">
@@ -200,6 +295,53 @@ export default function ValidationPanel({ dataset, onValidationComplete, disable
                 </div>
               </div>
             </div>
+
+            {/* Needs Mapping Banner */}
+            {validationResult.status === 'NEEDS_MAPPING' && (
+              <div style={{
+                marginTop: '14px',
+                padding: '14px 18px',
+                background: '#eff6ff',
+                border: '1px solid #bfdbfe',
+                borderRadius: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '12px',
+                flexWrap: 'wrap'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <Wrench size={22} style={{ color: '#2563eb', flexShrink: 0 }} />
+                  <div>
+                    <strong style={{ color: '#1e40af', fontSize: '13px' }}>
+                      Column Aliases Detected — Review and Fix Data Required
+                    </strong>
+                    <p style={{ color: '#1d4ed8', fontSize: '12px', margin: '2px 0 0 0' }}>
+                      {Object.keys(validationResult.mappable_columns || {}).length} column(s) match known aliases (e.g. {Object.entries(validationResult.mappable_columns || {}).slice(0, 3).map(([target, src]) => `${src} ➔ ${target}`).join(', ')}). Click 'Review and Fix Data' to preview and apply transformations safely without altering original data.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-warning"
+                  onClick={() => setIsCorrectionModalOpen(true)}
+                  style={{
+                    background: '#2563eb',
+                    borderColor: '#1d4ed8',
+                    color: '#ffffff',
+                    fontSize: '12.5px',
+                    padding: '8px 16px',
+                    fontWeight: 600,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <Wrench size={14} />
+                  Review and Fix Data →
+                </button>
+              </div>
+            )}
 
             {/* Check Breakdown Grid */}
             <div className="checks-grid">
@@ -410,8 +552,8 @@ export default function ValidationPanel({ dataset, onValidationComplete, disable
               </div>
             )}
 
-            {/* If Invalid, render full Evidence Table */}
-            {validationResult.status === 'INVALID' && (
+            {/* If Invalid or Needs Mapping, render Evidence Table */}
+            {(validationResult.status === 'INVALID' || validationResult.status === 'NEEDS_MAPPING') && validationResult.errors_preview?.length > 0 && (
               <ValidationErrors
                 errors={validationResult.errors_preview}
                 totalErrors={validationResult.validation_errors_count}
@@ -421,6 +563,19 @@ export default function ValidationPanel({ dataset, onValidationComplete, disable
           </div>
         )}
       </div>
+
+      {/* Interactive Data Correction Modal */}
+      {dataset && (
+        <DataCorrectionModal
+          isOpen={isCorrectionModalOpen}
+          onClose={() => setIsCorrectionModalOpen(false)}
+          datasetId={dataset.dataset_id}
+          contractName={contractName}
+          onCorrectionsApplied={(res) => {
+            handleValidate();
+          }}
+        />
+      )}
     </div>
   );
 }

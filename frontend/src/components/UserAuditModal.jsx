@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Users, Activity, Eye, ShieldCheck, Clock, RefreshCw, Calendar, Globe, Hash } from 'lucide-react';
 import { getUserActivities } from '../services/api';
+import { formatIST } from '../utils/dateUtils';
 
 export default function UserAuditModal({ isOpen, onClose }) {
   const [data, setData] = useState(null);
@@ -106,8 +107,8 @@ export default function UserAuditModal({ isOpen, onClose }) {
                   <th>Country</th>
                   <th>Logins</th>
                   <th>Visits</th>
-                  <th>Last Login (Neon UTC)</th>
-                  <th>Last Visit</th>
+                  <th>Last Login (IST)</th>
+                  <th>Last Visit (IST)</th>
                   <th>Client IP</th>
                 </tr>
               </thead>
@@ -126,10 +127,10 @@ export default function UserAuditModal({ isOpen, onClose }) {
                         <span className="badge badge-meta">{u.visit_count || 0} visits</span>
                       </td>
                       <td className="text-muted font-mono text-xs">
-                        {u.last_login_at ? new Date(u.last_login_at).toLocaleString() : 'Never'}
+                        {formatIST(u.last_login_at)}
                       </td>
                       <td className="text-muted font-mono text-xs">
-                        {u.last_visit_at ? new Date(u.last_visit_at).toLocaleString() : 'Never'}
+                        {formatIST(u.last_visit_at)}
                       </td>
                       <td className="font-mono text-xs">{u.last_ip || 'Local/Cloud'}</td>
                     </tr>
@@ -159,7 +160,7 @@ export default function UserAuditModal({ isOpen, onClose }) {
                   <th>ID</th>
                   <th>Type</th>
                   <th>User / Email</th>
-                  <th>Timestamp</th>
+                  <th>Timestamp (IST)</th>
                   <th>IP Address</th>
                   <th>Page / Route</th>
                   <th>Details</th>
@@ -188,7 +189,7 @@ export default function UserAuditModal({ isOpen, onClose }) {
                         <div className="text-muted text-xs">{act.email || '—'}</div>
                       </td>
                       <td className="font-mono text-xs text-muted">
-                        {new Date(act.timestamp).toLocaleString()}
+                        {formatIST(act.timestamp)}
                       </td>
                       <td className="font-mono text-xs">{act.ip_address || '127.0.0.1'}</td>
                       <td className="font-mono text-xs">{act.page_url || '/'}</td>

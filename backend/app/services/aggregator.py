@@ -24,13 +24,19 @@ def aggregate_dataset(df: pl.DataFrame) -> Dict[str, Any]:
             "sales_by_date": [],
         }
 
-    total_sales = float(df["total_amount"].sum())
-    total_quantity = int(df["quantity"].sum())
+    agg_df = df
+    if "quantity" in agg_df.columns and agg_df["quantity"].dtype in (pl.Utf8, pl.String):
+        agg_df = agg_df.with_columns(pl.col("quantity").cast(pl.Int32, strict=False).alias("quantity"))
+    if "total_amount" in agg_df.columns and agg_df["total_amount"].dtype in (pl.Utf8, pl.String):
+        agg_df = agg_df.with_columns(pl.col("total_amount").cast(pl.Float64, strict=False).alias("total_amount"))
+
+    total_sales = float(agg_df["total_amount"].sum())
+    total_quantity = int(agg_df["quantity"].sum())
     avg_tx_val = round(total_sales / tx_count, 2) if tx_count > 0 else 0.0
 
     # Sales by City
     city_agg = (
-        df.group_by("city")
+        agg_df.group_by("city")
         .agg([
             pl.col("total_amount").sum().round(2).alias("total_sales"),
             pl.col("quantity").sum().alias("total_quantity"),

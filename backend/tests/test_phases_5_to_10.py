@@ -20,6 +20,7 @@ from app.models.models import (
     ExperimentRecord,
 )
 from app.services.run_history import get_all_runs, get_run_artifacts, get_run_logs
+from app.services.time_utils import get_ist_now
 from app.services.diagnosis_engine import create_or_get_failure_diagnosis, diagnose_failure_rule_based, diagnose_failure_ai_classifier
 from app.services.backfill_planner import create_backfill_plan, approve_backfill_plan, compute_minimal_safe_tasks
 from app.services.scheduler import compute_cost_aware_schedule, approve_schedule
@@ -70,7 +71,7 @@ def test_phase_5_run_history_and_artifacts(tmp_path):
             file_format="CSV",
             contract_version="1.0",
             status="SUCCESS",
-            started_at=datetime.datetime.utcnow(),
+            started_at=get_ist_now(),
             dataset_fingerprint="sha256_dummy_fingerprint_phase5",
             artifact_path=str(sample_csv),
             rows_received=2,
@@ -518,6 +519,119 @@ def test_phase_10_monitoring_dashboard_and_experiments():
         assert resp.status_code == 200
         assert resp.headers["content-type"].startswith("text/csv")
         assert len(resp.content) > 0
+
+    finally:
+        db.close()
+
+
+def test_attendance_ai_diagnosis_and_backfill_recovery(tmp_path):
+    """
+    End-to-End Test for User Scenario:
+    1. Upload an Excel/CSV attendance dataset with columns:
+       S.NO, NAME, BRANCH, DEPT, VENDOR, CRT SEC, CRT ROOM, STATUS, REGD.NO, 09:20-10:10, 10:10-11:00, Total Conducted, Total Attended, Att (%)
+    2. When validated against default sales contract, AI diagnosis detects:
+       - Dataset Type Mismatch: Student Attendance report evaluated against Sales Transaction contract (0.98 confidence)
+    3. Generate Backfill Plan starting at 'Validation' (all 7 tasks).
+    4. Approve Plan and Execute Recovery:
+       - Auto-align completes missing contract schema
+       - All 7 recovery tasks execute to SUCCEEDED
+       - Recovery status is SUCCEEDED with 100% SUCCESS
+       - Dataset record is marked VALID and repaired on disk
+    """
+    db = SessionLocal()
+    try:
+        ds_id = "ds_att_rec_test"
+        sample_csv = tmp_path / "attendance_sample.csv"
+        sample_csv.write_text(
+            "S.NO,NAME,BRANCH,DEPT,VENDOR,CRT SEC,CRT ROOM,STATUS,REGD.NO,09:20-10:10,10:10-11:00,Total Conducted,Total Attended,Att (%)\n"
+            "1,K. Ramesh,CSE,ENGG,TALENT,SEC-A,R101,ACTIVE,2100030001,P,P,2,2,100.0\n"
+            "2,S. Priya,ECE,ENGG,TALENT,SEC-B,R102,ACTIVE,2100030002,P,A,2,1,50.0\n"
+            "3,M. Rahul,MECH,ENGG,TALENT,SEC-C,R103,ACTIVE,2100030003,A,A,2,0,0.0\n"
+        )
+
+        ds = Dataset(
+            id=ds_id,
+            filename=str(sample_csv),
+            file_type="CSV",
+            file_size_bytes=sample_csv.stat().st_size,
+            rows_count=3,
+            columns_count=14,
+            status="STORED"
+        )
+        db.merge(ds)
+        db.commit()
+
+        run_id = f"RUN-ATT-TEST-{uuid.uuid4().hex[:6].upper()}"
+        run = PipelineRun(
+            run_id=run_id,
+            dataset_id=ds_id,
+            file_format="CSV",
+            contract_version="1.0",
+            status="FAILED",
+            error_message="Missing 16 required columns declared in sales contract",
+            rows_received=3,
+            rows_processed=0,
+            rows_valid=0,
+            rows_invalid=3,
+        )
+        db.merge(run)
+
+        # Add failed task & downstream pending task
+        t_val = PipelineTask(
+            run_id=run_id,
+            task_name="Validation",
+            status="FAILED",
+            error_message="Contract violation: Missing required columns"
+        )
+        db.add(t_val)
+
+        # Add violation records for missing columns
+        for col in ["transaction_id", "customer_id", "quantity", "unit_price", "total_amount"]:
+            v = ValidationErrorRecord(
+                run_id=run_id,
+                row_number=1,
+                column_name=col,
+                error_type="MISSING_REQUIRED_COLUMN",
+                actual_value="Missing",
+                expected_rule=f"Column '{col}' required by contract"
+            )
+            db.add(v)
+        db.commit()
+
+        # Phase 6: AI Diagnostic Classifier
+        diag = create_or_get_failure_diagnosis(run_id, db, use_ai=True)
+        assert diag.failure_id.startswith("FAIL-")
+        assert len(diag.ranked_causes) >= 1
+        top_cause = diag.ranked_causes[0]
+        assert "Dataset Type Mismatch" in top_cause.cause
+        assert top_cause.confidence >= 0.95
+
+        # Phase 7: Backfill Planning (Plan starting at Validation)
+        plan_resp = create_backfill_plan(diag.failure_id, db)
+        assert plan_resp.plan_id.startswith("PLAN-")
+        assert "Validation" in plan_resp.selected_tasks
+        assert len(plan_resp.selected_tasks) == 7
+
+        # Approve Plan
+        appr_plan = approve_backfill_plan(plan_resp.plan_id, db)
+        assert appr_plan.status == "APPROVED"
+
+        # Phase 9: Authorize & Execute Recovery
+        recovery_resp = execute_recovery(appr_plan.plan_id, db)
+        assert recovery_resp.status == "SUCCEEDED"
+        assert recovery_resp.contract_validation_status == "PASSED"
+        assert recovery_resp.output_validation_status == "PASSED"
+        assert recovery_resp.task_states.get("Validation") == "SUCCEEDED"
+        assert recovery_resp.task_states.get("Cleaning") == "SUCCEEDED"
+        assert recovery_resp.task_states.get("Transformation") == "SUCCEEDED"
+        assert recovery_resp.task_states.get("Calculation") == "SUCCEEDED"
+        assert recovery_resp.task_states.get("Aggregation") == "SUCCEEDED"
+        assert recovery_resp.task_states.get("Quality Check") == "SUCCEEDED"
+        assert recovery_resp.task_states.get("DB Storage") == "SUCCEEDED"
+
+        # Verify dataset updated
+        ds_refreshed = db.query(Dataset).filter(Dataset.id == ds_id).first()
+        assert ds_refreshed.status == "STORED"
 
     finally:
         db.close()

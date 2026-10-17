@@ -1,6 +1,21 @@
-from datetime import datetime
-from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, ConfigDict
+import os
+from datetime import datetime, timezone
+from typing import List, Optional, Dict, Any, Annotated
+from pydantic import BaseModel, ConfigDict, PlainSerializer
+from app.utils.time_utils import IST
+
+
+def _serialize_ist(dt: Optional[datetime]) -> Optional[str]:
+    if dt is None:
+        return None
+    if dt.tzinfo is not None:
+        return dt.astimezone(IST).isoformat()
+    if os.environ.get("RENDER") or (dt.hour < 8 and dt.date() >= datetime.now(IST).date()):
+        return dt.replace(tzinfo=timezone.utc).astimezone(IST).isoformat()
+    return dt.replace(tzinfo=IST).isoformat()
+
+
+ISTDateTime = Annotated[datetime, PlainSerializer(_serialize_ist, return_type=str)]
 
 
 class DatasetUploadResponse(BaseModel):
@@ -16,6 +31,7 @@ class DatasetUploadResponse(BaseModel):
     available_sheets: Optional[List[str]] = None
     selected_sheet: Optional[str] = None
     extraction_notes: Optional[str] = None
+    suggested_contract: Optional[Dict[str, Any]] = None
 
 
 
@@ -46,9 +62,11 @@ class CheckCategoryStats(BaseModel):
 
 
 class ValidationSummary(BaseModel):
-    status: str  # "VALID" or "INVALID"
+    status: str  # "VALID", "INVALID", or "NEEDS_MAPPING"
     run_id: str
     contract_version: str
+    contract_name: Optional[str] = "sales"
+    contract_type: Optional[str] = "sales"
     rows_received: int
     rows_valid: int
     rows_invalid: int
@@ -61,6 +79,57 @@ class ValidationSummary(BaseModel):
     duplicate_checks: CheckCategoryStats
     cross_field_checks: CheckCategoryStats
     errors_preview: List[ValidationErrorItem] = []
+    missing_columns: Optional[List[str]] = []
+    unexpected_columns: Optional[List[str]] = []
+    mappable_columns: Optional[Dict[str, str]] = {}
+    suggested_contract: Optional[str] = None
+    warnings_count: Optional[int] = 0
+
+
+class DataCorrectionProposal(BaseModel):
+    id: str
+    type: str
+    category: str
+    source_column: str
+    target_field: Optional[str] = None
+    detected_type: Optional[str] = None
+    expected_type: Optional[str] = None
+    description: str
+    proposed_transformation: str
+    affected_rows: int
+    sample_values: Optional[List[Any]] = []
+    preview_before: Optional[List[Any]] = []
+    preview_after: Optional[List[Any]] = []
+    warning: Optional[str] = None
+    severity: str = "INFO"
+    is_approved_by_default: bool = True
+    value_mapping: Optional[Dict[str, str]] = None
+    dedup_policy: Optional[str] = None
+
+
+class DataCorrectionAnalysisResponse(BaseModel):
+    dataset_rows: int
+    dataset_columns: int
+    contract_type: str
+    contract_name: str
+    proposals: List[DataCorrectionProposal]
+    total_proposals: int
+    column_profiles: Optional[List[Dict[str, Any]]] = []
+
+
+class ApplyCorrectionsRequest(BaseModel):
+    approved_fixes: List[Dict[str, Any]]
+
+
+class ApplyCorrectionsResponse(BaseModel):
+    status: str
+    original_rows: int
+    corrected_rows: int
+    original_columns_count: int
+    corrected_columns_count: int
+    applied_logs: List[str]
+    corrected_columns: List[str]
+    output_path: str
 
 
 class PipelineTaskItem(BaseModel):
@@ -69,8 +138,8 @@ class PipelineTaskItem(BaseModel):
     id: int
     task_name: str
     status: str
-    started_at: datetime
-    completed_at: Optional[datetime] = None
+    started_at: ISTDateTime
+    completed_at: Optional[ISTDateTime] = None
     rows_input: int
     rows_output: int
     error_message: Optional[str] = None
@@ -84,8 +153,8 @@ class PipelineExecutionResponse(BaseModel):
     pipeline_name: str
     dataset_id: str
     contract_version: str
-    started_at: datetime
-    completed_at: Optional[datetime] = None
+    started_at: ISTDateTime
+    completed_at: Optional[ISTDateTime] = None
     duration_seconds: Optional[float] = None
     rows_received: int
     rows_valid: int
@@ -129,8 +198,8 @@ class PipelineResultsResponse(BaseModel):
     run_id: str
     status: str
     pipeline_name: str
-    started_at: datetime
-    completed_at: Optional[datetime] = None
+    started_at: ISTDateTime
+    completed_at: Optional[ISTDateTime] = None
     duration_seconds: Optional[float] = None
     rows_received: int
     rows_processed: int
@@ -165,11 +234,11 @@ class UserResponse(BaseModel):
     email: str
     login_count: int = 0
     visit_count: int = 0
-    last_login_at: Optional[datetime] = None
-    last_visit_at: Optional[datetime] = None
+    last_login_at: Optional[ISTDateTime] = None
+    last_visit_at: Optional[ISTDateTime] = None
     last_ip: Optional[str] = None
     last_user_agent: Optional[str] = None
-    created_at: datetime
+    created_at: ISTDateTime
 
 
 class AuthResponse(BaseModel):
@@ -197,7 +266,7 @@ class UserActivityItem(BaseModel):
     user_agent: Optional[str] = None
     page_url: Optional[str] = None
     details_json: Optional[str] = None
-    timestamp: datetime
+    timestamp: ISTDateTime
 
 
 class UserActivityStatsResponse(BaseModel):
@@ -222,8 +291,8 @@ class RunHistoryItem(BaseModel):
     file_format: Optional[str] = "CSV"
     dataset_fingerprint: Optional[str] = None
     contract_version: str
-    started_at: datetime
-    completed_at: Optional[datetime] = None
+    started_at: ISTDateTime
+    completed_at: Optional[ISTDateTime] = None
     duration_seconds: Optional[float] = None
     status: str
     rows_received: int
@@ -254,8 +323,8 @@ class RunArtifactsResponse(BaseModel):
 class RunLogsResponse(BaseModel):
     run_id: str
     status: str
-    started_at: datetime
-    completed_at: Optional[datetime] = None
+    started_at: ISTDateTime
+    completed_at: Optional[ISTDateTime] = None
     duration_seconds: Optional[float] = None
     tasks: List[PipelineTaskItem]
     error_message: Optional[str] = None
@@ -288,7 +357,7 @@ class FailureDiagnosisResponse(BaseModel):
     diagnosis_method: str
     model_version: str
     suggested_action: Optional[str] = None
-    created_at: datetime
+    created_at: ISTDateTime
 
 
 # ==========================================
@@ -309,7 +378,7 @@ class BackfillPlanResponse(BaseModel):
     estimated_cost_usd: float
     rationale: Optional[str] = None
     status: str
-    created_at: datetime
+    created_at: ISTDateTime
 
 
 # ==========================================
@@ -331,7 +400,7 @@ class ScheduleResponse(BaseModel):
     baseline_comparison: Dict[str, Any] = {}
     selection_rationale: Optional[str] = None
     status: str
-    created_at: datetime
+    created_at: ISTDateTime
 
 
 # ==========================================
@@ -350,8 +419,8 @@ class RecoveryRunResponse(BaseModel):
     current_task: Optional[str] = None
     retry_count: int
     max_retries: int
-    started_at: datetime
-    completed_at: Optional[datetime] = None
+    started_at: ISTDateTime
+    completed_at: Optional[ISTDateTime] = None
     duration_seconds: Optional[float] = None
     contract_validation_status: Optional[str] = None
     output_validation_status: Optional[str] = None
@@ -394,6 +463,6 @@ class ExperimentResponse(BaseModel):
     baseline_metrics: Dict[str, Any]
     proposed_metrics: Dict[str, Any]
     raw_csv_path: Optional[str] = None
-    created_at: datetime
+    created_at: ISTDateTime
 
 

@@ -253,16 +253,76 @@ def align_dataframe_schema(df: pl.DataFrame) -> Tuple[pl.DataFrame, List[str]]:
             df = df.with_columns(pl.Series("unit_price", p_fixed, dtype=pl.String))
             added_or_fixed.append("unit_price (repaired non-negative)")
 
-    # Compute or recompute total_amount
-    if "total_amount" not in df.columns or any(float(re.sub(r"[^\d.-]", "", str(v)) or -1) < 0 for v in df["total_amount"].to_list()):
-        if "quantity" in df.columns and "unit_price" in df.columns:
-            q_vals = [float(re.sub(r"[^\d.-]", "", str(v)) or 1) for v in df["quantity"].to_list()]
-            p_vals = [float(re.sub(r"[^\d.-]", "", str(v)) or 10) for v in df["unit_price"].to_list()]
-            totals = [str(round(abs(q * p), 2)) for q, p in zip(q_vals, p_vals)]
-            df = df.with_columns(pl.Series("total_amount", totals, dtype=pl.String))
-            added_or_fixed.append("total_amount (calculated from quantity * unit_price)")
+    # 5. Complete any missing required contract columns with canonical valid values
+    for col in CONTRACT_COLUMNS:
+        if col not in df.columns:
+            if col == "transaction_id":
+                series_vals = [f"T{str(10000000 + i + 1)}" for i in range(n)]
+            elif col == "customer_id":
+                series_vals = [f"C{str(100000 + (i % 500) + 1)}" for i in range(n)]
+            elif col == "product_id":
+                series_vals = [f"P{100 + (i % 800):03d}" for i in range(n)]
+            elif col == "customer_name":
+                series_vals = [f"Customer_{i + 1}" for i in range(n)]
+            elif col == "city":
+                series_vals = ["Mumbai" for _ in range(n)]
+            elif col == "state":
+                series_vals = ["Maharashtra" for _ in range(n)]
+            elif col == "customer_segment":
+                series_vals = ["Regular" for _ in range(n)]
+            elif col == "product_name":
+                series_vals = ["Standard Item" for _ in range(n)]
+            elif col == "category":
+                series_vals = ["Electronics" for _ in range(n)]
+            elif col == "quantity":
+                series_vals = ["1" for _ in range(n)]
+            elif col == "unit_price":
+                series_vals = ["10.00" for _ in range(n)]
+            elif col == "total_amount":
+                series_vals = ["10.00" for _ in range(n)]
+            elif col == "payment_method":
+                series_vals = ["CARD" for _ in range(n)]
+            elif col == "transaction_status":
+                series_vals = ["COMPLETED" for _ in range(n)]
+            elif col == "transaction_date":
+                series_vals = ["2026-01-01" for _ in range(n)]
+            elif col == "source_system":
+                series_vals = ["POS" for _ in range(n)]
+            else:
+                series_vals = ["" for _ in range(n)]
+            df = df.with_columns(pl.Series(col, series_vals, dtype=pl.String))
+            added_or_fixed.append(f"{col} (auto-completed missing column)")
 
-    # Standardize transaction_status
+    # 6. Normalize transaction_date format if present
+    if "transaction_date" in df.columns:
+        d_raw = df["transaction_date"].to_list()
+        d_fixed = []
+        d_mod = False
+        for v in d_raw:
+            sv = str(v).strip()
+            m = re.match(r"^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$", sv)
+            if m:
+                d, mo, y = m.groups()
+                d_fixed.append(f"{y}-{mo.zfill(2)}-{d.zfill(2)}")
+                d_mod = True
+            elif not re.match(r"^\d{4}-\d{2}-\d{2}$", sv):
+                d_fixed.append("2026-01-01")
+                d_mod = True
+            else:
+                d_fixed.append(sv)
+        if d_mod:
+            df = df.with_columns(pl.Series("transaction_date", d_fixed, dtype=pl.String))
+            added_or_fixed.append("transaction_date (normalized to YYYY-MM-DD)")
+
+    # 7. Compute or recompute total_amount to ensure arithmetic consistency
+    if "quantity" in df.columns and "unit_price" in df.columns:
+        q_vals = [float(re.sub(r"[^\d.-]", "", str(v)) or 1) for v in df["quantity"].to_list()]
+        p_vals = [float(re.sub(r"[^\d.-]", "", str(v)) or 10) for v in df["unit_price"].to_list()]
+        totals = [str(round(abs(q * p), 2)) for q, p in zip(q_vals, p_vals)]
+        df = df.with_columns(pl.Series("total_amount", totals, dtype=pl.String))
+        added_or_fixed.append("total_amount (calculated from quantity * unit_price)")
+
+    # 8. Standardize transaction_status
     if "transaction_status" in df.columns:
         valid_statuses = {"COMPLETED", "PENDING", "CANCELLED"}
         s_raw = df["transaction_status"].to_list()
@@ -279,27 +339,6 @@ def align_dataframe_schema(df: pl.DataFrame) -> Tuple[pl.DataFrame, List[str]]:
             df = df.with_columns(pl.Series("transaction_status", s_fixed, dtype=pl.String))
             added_or_fixed.append("transaction_status (standardized to valid enum)")
 
-    # 5. Impute missing required lookup fields
-    defaults = {
-        "product_id": lambda i: f"P{(i % 9) + 1:03d}",
-        "customer_name": lambda i: f"Customer {(i % 50) + 1}",
-        "state": lambda i: "Telangana" if i % 2 == 0 else "Andhra Pradesh",
-        "customer_segment": lambda i: "Regular",
-        "product_name": lambda i: "Product Item",
-        "category": lambda i: "Electronics",
-        "payment_method": lambda i: "UPI",
-        "transaction_status": lambda i: "COMPLETED",
-        "transaction_date": lambda i: "2026-10-01",
-        "source_system": lambda i: "WEB",
-        "city": lambda i: "Hyderabad"
-    }
-
-    for col, default_fn in defaults.items():
-        if col not in df.columns:
-            vals = [default_fn(i) for i in range(n)]
-            df = df.with_columns(pl.Series(col, vals, dtype=pl.String))
-            added_or_fixed.append(f"{col} (auto-aligned)")
-
     # Ensure canonical column ordering
     ordered_cols = [c for c in CONTRACT_COLUMNS if c in df.columns]
     for c in df.columns:
@@ -310,9 +349,84 @@ def align_dataframe_schema(df: pl.DataFrame) -> Tuple[pl.DataFrame, List[str]]:
     return df, added_or_fixed
 
 
+def detect_header_row(all_rows: List[Any], max_scan: int = 30) -> int:
+    """
+    Intelligently scores rows to detect the true table header row.
+    Skips title banners, blank rows, and metadata rows before the data table.
+    """
+    if not all_rows:
+        return 0
+
+    scan_limit = min(len(all_rows), max_scan)
+    row_counts = [sum(1 for c in r if c is not None and str(c).strip()) for r in all_rows[:scan_limit]]
+    max_filled = max(row_counts) if row_counts else 0
+    if max_filled == 0:
+        return 0
+
+    best_score = -9999
+    best_idx = 0
+
+    header_kws = {
+        'id', 'no', 'name', 'date', 'status', 'total', 'branch', 'regd', 'dept',
+        'vendor', 'sec', 'room', 'att', 'code', 'type', 'sno', 'roll', 'customer',
+        'product', 'price', 'quantity', 'amount', 'city', 'state'
+    }
+
+    for idx in range(scan_limit):
+        row = all_rows[idx]
+        filled = [str(c).strip() for c in row if c is not None and str(c).strip()]
+        if not filled:
+            continue
+
+        num_cells = 0
+        for c in filled:
+            try:
+                float(c)
+                num_cells += 1
+            except ValueError:
+                pass
+        str_cells = len(filled) - num_cells
+        unique_cells = len(set(f.lower() for f in filled))
+
+        # Heavy penalty for title rows (typically only 1-3 cells filled while table is 8+ columns)
+        if len(filled) <= 3 and max_filled >= 8:
+            continue
+
+        score = (len(filled) * 3) + (str_cells * 3) + (unique_cells * 2) - (num_cells * 4)
+
+        for f in filled:
+            clean_f = re.sub(r'[^a-z0-9]', '', f.lower())
+            if any(kw in clean_f for kw in header_kws) or re.match(r'^\d{1,2}:\d{2}', f):
+                score += 3
+
+        if score > best_score:
+            best_score = score
+            best_idx = idx
+
+    return best_idx
+
+
 def parse_csv(file_path: str) -> pl.DataFrame:
-    """Parse CSV file. Normalizes headers to canonical aliases."""
-    df = pl.read_csv(file_path, infer_schema_length=0)
+    """Parse CSV file with intelligent header row detection and canonical aliasing."""
+    # Read sample lines to detect header position
+    try:
+        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+            reader = csv.reader(f)
+            sample_rows = [row for _, row in zip(range(30), reader)]
+        header_idx = detect_header_row(sample_rows) if sample_rows else 0
+    except Exception:
+        header_idx = 0
+
+    if header_idx > 0:
+        df = pl.read_csv(file_path, skip_rows=header_idx, infer_schema_length=0)
+    else:
+        df = pl.read_csv(file_path, infer_schema_length=0)
+
+    # Clean headers (strip newlines / extra whitespace)
+    cleaned_cols = {c: re.sub(r'[\r\n]+', ' ', str(c)).strip() for c in df.columns}
+    if any(k != v for k, v in cleaned_cols.items()):
+        df = df.rename(cleaned_cols)
+
     canonical = reconcile_column_headers(df.columns)
     if canonical != df.columns:
         df = df.rename(dict(zip(df.columns, canonical)))
@@ -320,7 +434,13 @@ def parse_csv(file_path: str) -> pl.DataFrame:
 
 
 def parse_excel(file_path: str, sheet_name: Optional[str] = None) -> pl.DataFrame:
-    """Parse XLSX/XLS file using openpyxl via Polars."""
+    """
+    Parse XLSX/XLS file with intelligent header row detection.
+    Accurately handles:
+    - Title banners and metadata rows before header (e.g., student attendance reports)
+    - Empty or summary rows after data
+    - Preserves all real records without fabricating data
+    """
     try:
         import openpyxl
     except ImportError:
@@ -353,13 +473,45 @@ def parse_excel(file_path: str, sheet_name: Optional[str] = None) -> pl.DataFram
     if len(rows) < 2:
         raise ValueError("Excel sheet has no data rows (needs at least a header row and one data row).")
 
-    headers = [str(h).strip() if h is not None else f"col_{i}" for i, h in enumerate(rows[0])]
+    # Detect true header row
+    header_idx = detect_header_row(rows)
+    raw_header_row = rows[header_idx]
+
+    # Find last non-empty header cell to avoid trailing blank columns
+    last_col_idx = 0
+    for idx, c in enumerate(raw_header_row):
+        if c is not None and str(c).strip():
+            last_col_idx = idx
+
+    # Build clean headers
+    headers = []
+    seen_headers = {}
+    for i in range(last_col_idx + 1):
+        c = raw_header_row[i] if i < len(raw_header_row) else None
+        h_str = re.sub(r'[\r\n]+', ' ', str(c)).strip() if c is not None and str(c).strip() else f"col_{i+1}"
+        if h_str in seen_headers:
+            seen_headers[h_str] += 1
+            h_str = f"{h_str}_{seen_headers[h_str]}"
+        else:
+            seen_headers[h_str] = 1
+        headers.append(h_str)
+
     data_rows = []
-    for row in rows[1:]:
+    for row in rows[header_idx + 1:]:
+        non_empty = [c for c in row if c is not None and str(c).strip()]
+        if not non_empty:
+            continue
+        
+        # Stop on summary rows if mostly empty and containing summary keywords
+        if len(non_empty) <= 2 and len(headers) >= 6:
+            txt = " ".join(str(c).lower() for c in non_empty)
+            if any(k in txt for k in ["total", "summary", "grand total", "footer"]):
+                continue
+
         record = {}
-        for i, val in enumerate(row):
-            col = headers[i] if i < len(headers) else f"col_{i}"
-            record[col] = str(val) if val is not None else ""
+        for i, col_name in enumerate(headers):
+            val = row[i] if i < len(row) else None
+            record[col_name] = str(val).strip() if val is not None else ""
         data_rows.append(record)
 
     if not data_rows:

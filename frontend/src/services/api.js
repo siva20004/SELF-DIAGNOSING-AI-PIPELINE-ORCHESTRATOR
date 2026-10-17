@@ -42,14 +42,52 @@ export const getDatasetPreview = async (datasetId, limit = 15) => {
   return response.data;
 };
 
-export const validateDataset = async (datasetId) => {
-  const response = await client.post(`/api/datasets/${datasetId}/validate`);
+export const validateDataset = async (datasetId, contractName = null) => {
+  const params = contractName ? { contract_name: contractName } : {};
+  const response = await client.post(`/api/datasets/${datasetId}/validate`, null, { params });
   return response.data;
 };
 
-export const executePipeline = async (datasetId) => {
-  const response = await client.post(`/api/datasets/${datasetId}/execute`);
+export const executePipeline = async (datasetId, contractName = null) => {
+  const params = contractName ? { contract_name: contractName } : {};
+  const response = await client.post(`/api/datasets/${datasetId}/execute`, null, { params });
   return response.data;
+};
+
+export const getContracts = async () => {
+  const response = await client.get('/api/contracts');
+  return response.data;
+};
+
+export const getContract = async (contractName) => {
+  const response = await client.get(`/api/contracts/${contractName}`);
+  return response.data;
+};
+
+export const detectDatasetContract = async (datasetId) => {
+  const response = await client.get(`/api/datasets/${datasetId}/detect-contract`);
+  return response.data;
+};
+
+export const analyzeCorrections = async (datasetId, contractName = null) => {
+  const params = contractName ? { contract_name: contractName } : {};
+  const response = await client.get(`/api/datasets/${datasetId}/corrections/analyze`, { params });
+  return response.data;
+};
+
+export const applyCorrections = async (datasetId, approvedFixes) => {
+  const response = await client.post(`/api/datasets/${datasetId}/corrections/apply`, {
+    approved_fixes: approvedFixes,
+  });
+  return response.data;
+};
+
+export const getDownloadProcessedUrl = (runId) => {
+  return `${API_BASE_URL}/api/runs/${runId}/download/processed`;
+};
+
+export const getDownloadValidationErrorsUrl = (runId) => {
+  return `${API_BASE_URL}/api/runs/${runId}/download/validation-errors`;
 };
 
 export const getRun = async (runId) => {
@@ -242,6 +280,13 @@ export default {
   recordVisit,
   logOutUser,
   getUserActivities,
+  getContracts,
+  getContract,
+  detectDatasetContract,
+  analyzeCorrections,
+  applyCorrections,
+  getDownloadProcessedUrl,
+  getDownloadValidationErrorsUrl,
 };
 
 

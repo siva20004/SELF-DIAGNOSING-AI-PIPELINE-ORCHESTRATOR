@@ -1,4 +1,14 @@
 import os
+import time
+
+# Enforce Indian Standard Time (IST) on POSIX/Linux containers (Render, Vercel, Docker)
+if hasattr(time, "tzset"):
+    os.environ["TZ"] = "Asia/Kolkata"
+    try:
+        time.tzset()
+    except Exception:
+        pass
+
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

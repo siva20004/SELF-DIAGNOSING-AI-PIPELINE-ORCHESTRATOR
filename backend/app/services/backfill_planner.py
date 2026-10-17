@@ -20,6 +20,7 @@ from app.models.models import (
     FailureDiagnosisRecord,
     BackfillPlanRecord,
 )
+from app.services.time_utils import get_ist_now
 from app.schemas.schemas import BackfillPlanResponse
 
 
@@ -131,7 +132,7 @@ def create_backfill_plan(
         estimated_cost_usd=estimated_cost_usd,
         rationale=rationale,
         status="PENDING_APPROVAL",
-        created_at=datetime.datetime.utcnow(),
+        created_at=get_ist_now(),
     )
 
     db.add(plan_record)

@@ -6,6 +6,7 @@ from fastapi import UploadFile, HTTPException
 from sqlalchemy.orm import Session
 from app.models.models import Dataset
 from app.schemas.schemas import DatasetUploadResponse, DatasetPreviewResponse
+from app.services.time_utils import get_ist_now
 from app.services.file_parsers import (
     detect_format,
     validate_file_safety,
@@ -28,7 +29,12 @@ def get_dataset_file_path(dataset_id: str, db: Session) -> Tuple[str, str]:
     if not dataset:
         raise HTTPException(status_code=404, detail=f"Dataset {dataset_id} not found")
 
-    # Check for the normalized CSV file first
+    # Check for corrected CSV file first (if user applied corrections)
+    corr_path = os.path.join(UPLOAD_DIR, f"{dataset_id}_corrected.csv")
+    if os.path.exists(corr_path):
+        return corr_path, "CSV"
+
+    # Check for the normalized CSV file
     norm_path = os.path.join(UPLOAD_DIR, f"{dataset_id}_normalized.csv")
     if os.path.exists(norm_path):
         return norm_path, "CSV"
@@ -173,12 +179,16 @@ async def handle_file_upload(
         file_size_bytes=file_size_bytes,
         rows_count=rows_count,
         columns_count=columns_count,
+        uploaded_at=get_ist_now(),
         status="UPLOADED"
     )
 
     db.add(dataset_record)
     db.commit()
     db.refresh(dataset_record)
+
+    from app.services.contract_loader import detect_contract_for_columns
+    suggested_contract = detect_contract_for_columns(list(df.columns))
 
     return DatasetUploadResponse(
         dataset_id=dataset_record.id,
@@ -190,7 +200,8 @@ async def handle_file_upload(
         status=dataset_record.status,
         available_sheets=available_sheets,
         selected_sheet=selected_sheet,
-        extraction_notes=extraction_notes
+        extraction_notes=extraction_notes,
+        suggested_contract=suggested_contract
     )
 
 

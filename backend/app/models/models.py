@@ -13,6 +13,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship
 from app.database.session import Base
+from app.utils.time_utils import get_ist_now
 
 
 class Dataset(Base):
@@ -24,7 +25,7 @@ class Dataset(Base):
     file_size_bytes = Column(BigInteger, nullable=False)
     rows_count = Column(BigInteger, nullable=False)
     columns_count = Column(Integer, nullable=False)
-    uploaded_at = Column(DateTime, default=datetime.utcnow, server_default=func.now(), nullable=False)
+    uploaded_at = Column(DateTime, default=get_ist_now, nullable=False)
     status = Column(String(32), nullable=False, default="UPLOADED")
 
     runs = relationship("PipelineRun", back_populates="dataset", cascade="all, delete-orphan")
@@ -37,7 +38,7 @@ class PipelineRun(Base):
     pipeline_name = Column(String(128), nullable=False, default="Sales_Transaction_Pipeline")
     dataset_id = Column(String(64), ForeignKey("datasets.id", ondelete="CASCADE"), nullable=False)
     contract_version = Column(String(32), nullable=False, default="1.0")
-    started_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    started_at = Column(DateTime, default=get_ist_now, nullable=False)
     completed_at = Column(DateTime, nullable=True)
     status = Column(String(32), nullable=False, default="RUNNING")
     rows_received = Column(BigInteger, default=0)
@@ -67,7 +68,7 @@ class PipelineTask(Base):
     run_id = Column(String(64), ForeignKey("pipeline_runs.run_id", ondelete="CASCADE"), nullable=False, index=True)
     task_name = Column(String(64), nullable=False)
     status = Column(String(32), nullable=False, default="RUNNING")
-    started_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    started_at = Column(DateTime, default=get_ist_now, nullable=False)
     completed_at = Column(DateTime, nullable=True)
     rows_input = Column(BigInteger, default=0)
     rows_output = Column(BigInteger, default=0)
@@ -87,7 +88,7 @@ class ValidationErrorRecord(Base):
     actual_value = Column(Text, nullable=True)
     expected_rule = Column(Text, nullable=True)
     severity = Column(String(32), default="ERROR")
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=get_ist_now, nullable=False)
 
 
 class ProcessedTransaction(Base):
@@ -144,7 +145,7 @@ class User(Base):
     last_visit_at = Column(DateTime, nullable=True)
     last_ip = Column(String(64), nullable=True)
     last_user_agent = Column(String(512), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now(), nullable=False)
+    created_at = Column(DateTime, default=get_ist_now, nullable=False)
 
     activities = relationship("UserActivity", back_populates="user", cascade="all, delete-orphan")
 
@@ -161,7 +162,7 @@ class UserActivity(Base):
     user_agent = Column(String(512), nullable=True)
     page_url = Column(String(512), nullable=True)
     details_json = Column(Text, nullable=True)
-    timestamp = Column(DateTime, default=datetime.utcnow, server_default=func.now(), nullable=False, index=True)
+    timestamp = Column(DateTime, default=get_ist_now, nullable=False, index=True)
 
     user = relationship("User", back_populates="activities")
 
@@ -179,7 +180,7 @@ class FailureDiagnosisRecord(Base):
     diagnosis_method = Column(String(64), nullable=False, default="rule_based_baseline")
     model_version = Column(String(32), nullable=False, default="1.0")
     suggested_action = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=get_ist_now, nullable=False)
 
     run = relationship("PipelineRun", back_populates="diagnoses")
 
@@ -198,7 +199,7 @@ class BackfillPlanRecord(Base):
     estimated_cost_usd = Column(Numeric(12, 6), nullable=False, default=0.0)
     rationale = Column(Text, nullable=True)
     status = Column(String(32), nullable=False, default="PENDING_APPROVAL")  # PENDING_APPROVAL, APPROVED, REJECTED, EXECUTED
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=get_ist_now, nullable=False)
 
     run = relationship("PipelineRun", back_populates="backfill_plans")
     schedules = relationship("ScheduleRecord", back_populates="plan", cascade="all, delete-orphan")
@@ -219,7 +220,7 @@ class ScheduleRecord(Base):
     baseline_comparison_json = Column(Text, nullable=True)
     selection_rationale = Column(Text, nullable=True)
     status = Column(String(32), nullable=False, default="SCHEDULED")  # SCHEDULED, APPROVED, EXECUTED
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=get_ist_now, nullable=False)
 
     plan = relationship("BackfillPlanRecord", back_populates="schedules")
     recoveries = relationship("RecoveryRunRecord", back_populates="schedule", cascade="all, delete-orphan")
@@ -237,7 +238,7 @@ class RecoveryRunRecord(Base):
     current_task = Column(String(64), nullable=True)
     retry_count = Column(Integer, default=0)
     max_retries = Column(Integer, default=3)
-    started_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    started_at = Column(DateTime, default=get_ist_now, nullable=False)
     completed_at = Column(DateTime, nullable=True)
     duration_seconds = Column(Numeric(10, 2), nullable=True)
     contract_validation_status = Column(String(32), nullable=True)
@@ -259,6 +260,6 @@ class ExperimentRecord(Base):
     baseline_metrics_json = Column(Text, nullable=False)
     proposed_metrics_json = Column(Text, nullable=False)
     raw_csv_path = Column(String(255), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=get_ist_now, nullable=False)
 
 
