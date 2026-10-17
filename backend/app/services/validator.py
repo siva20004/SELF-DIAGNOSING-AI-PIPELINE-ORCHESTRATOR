@@ -57,6 +57,26 @@ def validate_dataset(
     total_rows = len(df)
     cols = list(df.columns)
 
+    # Auto-normalize date columns to standard ISO YYYY-MM-DD
+    target_date_cols = [
+        c for c in cols 
+        if _norm(c) in ("transactiondate", "date", "orderdate", "txndate")
+    ]
+    date_modified = False
+    for dt_col in target_date_cols:
+        from app.services.time_utils import normalize_date_val
+        raw_vals = df[dt_col].cast(pl.String).to_list()
+        norm_vals = [normalize_date_val(v) for v in raw_vals]
+        if norm_vals != raw_vals:
+            df = df.with_columns(pl.Series(dt_col, norm_vals, dtype=pl.String))
+            date_modified = True
+
+    if date_modified and ("_normalized.csv" in file_path or "uploads" in file_path or "temp" in file_path.lower() or "tmp" in file_path.lower()):
+        try:
+            df.write_csv(file_path)
+        except Exception:
+            pass
+
     # If contract_data not provided, auto-detect or load specified
     if contract_data is None:
         if contract_name:
@@ -233,6 +253,26 @@ def validate_dataset(
                             error_type="PATTERN_ERROR",
                             actual_value=str(col_s[idx]),
                             expected_rule=f"Pattern: {pat}",
+                            severity="ERROR",
+                        )
+                    )
+        elif not pat and field_meta.get("type") == "date" and act_col and act_col in cols:
+            pattern_checks_total += total_rows
+            col_s = df[act_col].cast(pl.String)
+            valid_mask = col_s.str.contains(r"^\d{4}-\d{2}-\d{2}$")
+            invalid_indices = (~valid_mask).arg_true().to_list()
+            if invalid_indices:
+                pattern_checks_failed += len(invalid_indices)
+                for idx in invalid_indices[:50]:
+                    r_num = idx + 1
+                    invalid_row_set.add(r_num)
+                    errors.append(
+                        ValidationErrorItem(
+                            row_number=r_num,
+                            column_name=act_col,
+                            error_type="DATE_FORMAT_ERROR",
+                            actual_value=str(col_s[idx]),
+                            expected_rule="Date must follow ISO standard YYYY-MM-DD",
                             severity="ERROR",
                         )
                     )

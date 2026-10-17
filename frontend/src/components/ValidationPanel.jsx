@@ -47,15 +47,32 @@ export default function ValidationPanel({ dataset, onValidationComplete, disable
   };
 
   const handleFixDateFormat = async () => {
-    if (!dataset?.dataset_id) return;
+    const dId = dataset?.dataset_id || dataset?.id;
+    if (!dId) return;
     setFixingDate(true);
     setDateFixResult(null);
 
     try {
-      const result = await fixDateFormat(dataset.dataset_id);
+      const result = await fixDateFormat(dId);
       setDateFixResult(result);
       // Auto re-validate after fixing
-      setTimeout(() => handleValidate(), 800);
+      setTimeout(async () => {
+        try {
+          const activeContract = contractName || 'sales';
+          const summary = await validateDataset(dId, activeContract);
+          setValidationResult(summary);
+          if (onValidationComplete) {
+            onValidationComplete(summary);
+          }
+          if (summary.status === 'VALID' || summary.status === 'VALID_WITH_WARNINGS' || summary.status === 'NEEDS_MAPPING') {
+            if (onAutoResumeExecution) {
+              onAutoResumeExecution();
+            }
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }, 600);
     } catch (err) {
       console.error(err);
       const msg = err.response?.data?.detail || err.message || 'Date format fix failed';

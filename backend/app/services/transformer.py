@@ -18,7 +18,10 @@ def transform_dataset(df: pl.DataFrame) -> Tuple[pl.DataFrame, int, int]:
     if "total_amount" in df.columns:
         exprs.append(pl.col("total_amount").cast(pl.Float64, strict=False).alias("total_amount"))
     if "transaction_date" in df.columns:
-        exprs.append(pl.col("transaction_date").cast(pl.String).str.slice(0, 10).alias("transaction_date"))
+        from app.services.time_utils import normalize_date_val
+        raw_dates = df["transaction_date"].to_list()
+        norm_dates = [normalize_date_val(d) for d in raw_dates]
+        exprs.append(pl.Series("transaction_date", norm_dates, dtype=pl.String))
 
     transformed_df = df.with_columns(exprs) if exprs else df
     output_rows = len(transformed_df)

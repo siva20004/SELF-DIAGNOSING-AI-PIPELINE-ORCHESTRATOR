@@ -377,22 +377,10 @@ def align_dataframe_schema(df: pl.DataFrame) -> Tuple[pl.DataFrame, List[str]]:
 
     # 6. Normalize transaction_date format if present
     if "transaction_date" in df.columns:
+        from app.services.time_utils import normalize_date_val
         d_raw = df["transaction_date"].to_list()
-        d_fixed = []
-        d_mod = False
-        for v in d_raw:
-            sv = str(v).strip()
-            m = re.match(r"^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$", sv)
-            if m:
-                d, mo, y = m.groups()
-                d_fixed.append(f"{y}-{mo.zfill(2)}-{d.zfill(2)}")
-                d_mod = True
-            elif not re.match(r"^\d{4}-\d{2}-\d{2}$", sv):
-                d_fixed.append("2026-01-01")
-                d_mod = True
-            else:
-                d_fixed.append(sv)
-        if d_mod:
+        d_fixed = [normalize_date_val(v) or "2026-01-01" for v in d_raw]
+        if d_fixed != d_raw:
             df = df.with_columns(pl.Series("transaction_date", d_fixed, dtype=pl.String))
             added_or_fixed.append("transaction_date (normalized to YYYY-MM-DD)")
 
@@ -826,10 +814,11 @@ def parse_pdf(file_path: str) -> pl.DataFrame:
         if record.get("payment_method") == "NETBANKIN":
             record["payment_method"] = "NETBANKING"
 
-        # 3. Clean leading D/artifact from transaction_date
+        # 3. Clean leading D/artifact from transaction_date and normalize to ISO YYYY-MM-DD
         date_val = record.get("transaction_date", "")
-        if date_val.startswith("D ") or (date_val.startswith("D") and len(date_val) > 1 and not date_val[1].isdigit()):
-            record["transaction_date"] = date_val.lstrip("D").strip()
+        if date_val:
+            from app.services.time_utils import normalize_date_val
+            record["transaction_date"] = normalize_date_val(date_val)
 
         # 4. Clean customer_segment
         seg_val = record.get("customer_segment", "")

@@ -141,6 +141,19 @@ async def handle_file_upload(
         if columns_count == 0:
             raise ValueError("Parsed dataset contains 0 columns.")
 
+        # Normalize date column if present (e.g. from PDF, Excel, etc.) to ISO YYYY-MM-DD
+        date_candidates = [
+            c for c in df.columns 
+            if c.lower().replace("_", "").replace(".", "").strip() in ("transactiondate", "date", "orderdate")
+        ]
+        if date_candidates:
+            from app.services.time_utils import normalize_date_val
+            target_date_col = date_candidates[0]
+            raw_dates = df[target_date_col].cast(pl.String).to_list()
+            norm_dates = [normalize_date_val(d) for d in raw_dates]
+            if norm_dates != raw_dates:
+                df = df.with_columns(pl.Series(target_date_col, norm_dates, dtype=pl.String))
+
         # Write normalized CSV
         df.write_csv(normalized_path)
 
