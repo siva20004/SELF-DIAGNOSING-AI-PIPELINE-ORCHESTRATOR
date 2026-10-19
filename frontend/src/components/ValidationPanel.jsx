@@ -128,13 +128,13 @@ export default function ValidationPanel({ dataset, onValidationComplete, disable
     if (stats.failed === 0) {
       return (
         <span className="badge badge-success">
-          {stats.passed.toLocaleString()} / {stats.total.toLocaleString()} Passed
+          {Number(stats.passed ?? 0).toLocaleString()} / {Number(stats.total ?? 0).toLocaleString()} Passed
         </span>
       );
     }
     return (
       <span className="badge badge-danger">
-        {stats.failed.toLocaleString()} Failed
+        {Number(stats.failed ?? 0).toLocaleString()} Failed
       </span>
     );
   };
@@ -363,22 +363,22 @@ export default function ValidationPanel({ dataset, onValidationComplete, disable
               <div className="summary-stat-group">
                 <div className="stat-box">
                   <span className="stat-label">Rows Received</span>
-                  <span className="stat-value">{validationResult.rows_received.toLocaleString()}</span>
+                  <span className="stat-value">{Number(validationResult?.rows_received ?? 0).toLocaleString()}</span>
                 </div>
                 <div className="stat-box">
                   <span className="stat-label">Rows Valid</span>
-                  <span className="stat-value text-success">{validationResult.rows_valid.toLocaleString()}</span>
+                  <span className="stat-value text-success">{Number(validationResult?.rows_valid ?? 0).toLocaleString()}</span>
                 </div>
                 <div className="stat-box">
                   <span className="stat-label">Rows Invalid</span>
-                  <span className={`stat-value ${validationResult.rows_invalid > 0 ? 'text-danger' : 'text-success'}`}>
-                    {validationResult.rows_invalid.toLocaleString()}
+                  <span className={`stat-value ${Number(validationResult?.rows_invalid ?? 0) > 0 ? 'text-danger' : 'text-success'}`}>
+                    {Number(validationResult?.rows_invalid ?? 0).toLocaleString()}
                   </span>
                 </div>
                 <div className="stat-box">
                   <span className="stat-label">Total Errors</span>
-                  <span className={`stat-value ${validationResult.validation_errors_count > 0 ? 'text-danger' : 'text-success'}`}>
-                    {validationResult.validation_errors_count.toLocaleString()}
+                  <span className={`stat-value ${Number(validationResult?.validation_errors_count ?? 0) > 0 ? 'text-danger' : 'text-success'}`}>
+                    {Number(validationResult?.validation_errors_count ?? 0).toLocaleString()}
                   </span>
                 </div>
               </div>
@@ -500,7 +500,7 @@ export default function ValidationPanel({ dataset, onValidationComplete, disable
               <div className="alert alert-success" style={{ marginTop: '16px' }}>
                 <CheckCircle size={18} style={{ marginRight: '8px', flexShrink: 0 }} />
                 <div>
-                  <strong>Data Contract Verification Passed:</strong> All {validationResult.rows_received.toLocaleString()} rows satisfy 100% of schema definitions, numeric ranges, enum restrictions, and arithmetic rules. Pipeline execution is now unlocked.
+                  <strong>Data Contract Verification Passed:</strong> All {Number(validationResult?.rows_received ?? 0).toLocaleString()} rows satisfy 100% of schema definitions, numeric ranges, enum restrictions, and arithmetic rules. Pipeline execution is now unlocked.
                 </div>
               </div>
             )}
@@ -667,7 +667,7 @@ export default function ValidationPanel({ dataset, onValidationComplete, disable
               <div className="alert alert-success" style={{ marginTop: '12px' }}>
                 <CheckCircle size={18} style={{ marginRight: '8px', flexShrink: 0 }} />
                 <div>
-                  <strong>Date Format Fixed:</strong> {dateFixResult.converted_count.toLocaleString()} dates converted from dd/mm/yyyy → yyyy-mm-dd. Re-validating dataset...
+                  <strong>Date Format Fixed:</strong> {Number(dateFixResult?.converted_count ?? 0).toLocaleString()} dates converted from dd/mm/yyyy → yyyy-mm-dd. Re-validating dataset...
                 </div>
               </div>
             )}

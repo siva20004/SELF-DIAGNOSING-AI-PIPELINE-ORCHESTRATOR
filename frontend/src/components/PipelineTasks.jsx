@@ -50,8 +50,8 @@ export default function PipelineTasks({ tasks }) {
                     {task.status}
                   </span>
                 </td>
-                <td className="font-mono">{task.rows_input.toLocaleString()}</td>
-                <td className="font-mono">{task.rows_output.toLocaleString()}</td>
+                <td className="font-mono">{task.rows_input != null ? Number(task.rows_input).toLocaleString() : '0'}</td>
+                <td className="font-mono">{task.rows_output != null ? Number(task.rows_output).toLocaleString() : '0'}</td>
                 <td className="font-mono">{calculateDuration(task.started_at, task.completed_at)}</td>
                 <td className="task-err-cell">
                   {task.error_message ? (

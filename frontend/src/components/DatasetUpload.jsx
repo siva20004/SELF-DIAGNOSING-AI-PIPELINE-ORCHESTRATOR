@@ -412,12 +412,12 @@ export default function DatasetUpload({ onDatasetUploaded, disabled }) {
               <div className="metadata-item">
                 <span className="metadata-label">Normalized Records</span>
                 <span className="metadata-value highlight-num">
-                  {datasetInfo.rows.toLocaleString()}
+                  {Number(datasetInfo?.rows ?? datasetInfo?.rows_count ?? 0).toLocaleString()}
                 </span>
               </div>
               <div className="metadata-item">
                 <span className="metadata-label">Normalized Columns</span>
-                <span className="metadata-value highlight-num">{datasetInfo.columns}</span>
+                <span className="metadata-value highlight-num">{datasetInfo?.columns ?? datasetInfo?.columns_count ?? 0}</span>
               </div>
             </div>
 
@@ -427,7 +427,7 @@ export default function DatasetUpload({ onDatasetUploaded, disabled }) {
                 <div className="preview-header">
                   <div className="preview-title">
                     <Table size={16} style={{ marginRight: '6px' }} />
-                    Normalized Dataset Preview (Showing first {previewData.preview_rows.length} of {datasetInfo.rows.toLocaleString()} records)
+                    Normalized Dataset Preview (Showing first {previewData.preview_rows.length} of {Number(datasetInfo?.rows ?? datasetInfo?.rows_count ?? 0).toLocaleString()} records)
                   </div>
                   <span className="preview-note">Preview is sampled safely from normalized CSV without loading entire dataset into browser</span>
                 </div>

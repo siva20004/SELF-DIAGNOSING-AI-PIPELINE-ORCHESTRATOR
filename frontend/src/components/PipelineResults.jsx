@@ -63,6 +63,12 @@ export default function PipelineResults({ results, dataset }) {
     }).format(val || 0);
   };
 
+  const safeFormatNumber = (val, defaultVal = '0') => {
+    if (val === null || val === undefined) return defaultVal;
+    const num = Number(val);
+    return isNaN(num) ? defaultVal : num.toLocaleString();
+  };
+
   const formatDate = (isoStr) => {
     return formatIST(isoStr);
   };
@@ -124,15 +130,15 @@ export default function PipelineResults({ results, dataset }) {
           }}>
             <div>
               <span style={{ fontSize: '11px', color: '#64748b', display: 'block' }}>File Name</span>
-              <strong style={{ fontSize: '13px', color: '#1e293b' }} title={dataset.filename}>{dataset.filename}</strong>
+              <strong style={{ fontSize: '13px', color: '#1e293b' }} title={dataset?.filename || 'Dataset'}>{dataset?.filename || 'Dataset'}</strong>
             </div>
             <div>
               <span style={{ fontSize: '11px', color: '#64748b', display: 'block' }}>Format</span>
-              <span className="badge badge-neutral" style={{ marginTop: '2px' }}>{dataset.file_type}</span>
+              <span className="badge badge-neutral" style={{ marginTop: '2px' }}>{dataset?.file_type || 'CSV'}</span>
             </div>
             <div>
               <span style={{ fontSize: '11px', color: '#64748b', display: 'block' }}>Records Ingested</span>
-              <strong style={{ fontSize: '13px', color: '#1e293b' }}>{(rows_processed || dataset.rows || rows_received)?.toLocaleString()}</strong>
+              <strong style={{ fontSize: '13px', color: '#1e293b' }}>{safeFormatNumber(rows_processed ?? dataset?.rows ?? rows_received)}</strong>
             </div>
             <div>
               <span style={{ fontSize: '11px', color: '#64748b', display: 'block' }}>Contract Type</span>
@@ -190,15 +196,15 @@ export default function PipelineResults({ results, dataset }) {
         <div className="run-stats-grid">
           <div className="run-stat-item">
             <span className="stat-sub">Rows Received</span>
-            <span className="stat-main">{rows_received.toLocaleString()}</span>
+            <span className="stat-main">{safeFormatNumber(rows_received ?? rows_processed)}</span>
           </div>
           <div className="run-stat-item">
             <span className="stat-sub">Rows Processed</span>
-            <span className="stat-main text-success">{(rows_processed || rows_received).toLocaleString()}</span>
+            <span className="stat-main text-success">{safeFormatNumber(rows_processed ?? rows_received)}</span>
           </div>
           <div className="run-stat-item">
             <span className="stat-sub">Rows Rejected</span>
-            <span className="stat-main text-muted">{(rows_rejected || 0).toLocaleString()}</span>
+            <span className="stat-main text-muted">{safeFormatNumber(rows_rejected)}</span>
           </div>
           <div className="run-stat-item">
             <span className="stat-sub">Execution Duration</span>
@@ -229,7 +235,7 @@ export default function PipelineResults({ results, dataset }) {
                   <Users size={20} />
                 </div>
               </div>
-              <div className="kpi-value">{attendance_results.overall?.total_students?.toLocaleString() || 0}</div>
+              <div className="kpi-value">{safeFormatNumber(attendance_results?.overall?.total_students)}</div>
               <div className="kpi-meta">Real student records parsed from file</div>
             </div>
 
@@ -280,7 +286,7 @@ export default function PipelineResults({ results, dataset }) {
                 </div>
               </div>
               <div className="kpi-value" style={{ color: '#dc2626' }}>
-                {attendance_results.overall?.students_below_75_pct?.toLocaleString() || 0}
+                {safeFormatNumber(attendance_results?.overall?.students_below_75_pct)}
               </div>
               <div className="kpi-meta">Below university minimum threshold</div>
             </div>
@@ -369,12 +375,12 @@ export default function PipelineResults({ results, dataset }) {
                         </tr>
                       </thead>
                       <tbody>
-                        {attendance_results.branch_wise.map((b) => (
+                        {attendance_results?.branch_wise?.map((b) => (
                           <tr key={b.branch}>
                             <td className="font-semibold">{b.branch}</td>
-                            <td style={{ textAlign: 'right' }} className="font-mono">{b.student_count.toLocaleString()}</td>
-                            <td style={{ textAlign: 'right' }} className="font-mono">{b.total_attended.toLocaleString()}</td>
-                            <td style={{ textAlign: 'right' }} className="font-mono">{b.total_conducted.toLocaleString()}</td>
+                            <td style={{ textAlign: 'right' }} className="font-mono">{safeFormatNumber(b.student_count)}</td>
+                            <td style={{ textAlign: 'right' }} className="font-mono">{safeFormatNumber(b.total_attended)}</td>
+                            <td style={{ textAlign: 'right' }} className="font-mono">{safeFormatNumber(b.total_conducted)}</td>
                             <td style={{ textAlign: 'right' }} className="font-mono font-semibold">
                               <span style={{
                                 color: b.avg_attendance_pct >= 75 ? '#16a34a' : b.avg_attendance_pct >= 50 ? '#d97706' : '#dc2626'
@@ -412,12 +418,12 @@ export default function PipelineResults({ results, dataset }) {
                         </tr>
                       </thead>
                       <tbody>
-                        {attendance_results.session_wise.map((s) => (
+                        {attendance_results?.session_wise?.map((s) => (
                           <tr key={s.session}>
                             <td className="font-mono font-semibold" style={{ fontSize: '12px' }}>{s.session}</td>
-                            <td style={{ textAlign: 'right', color: '#16a34a' }} className="font-mono">{s.present.toLocaleString()}</td>
-                            <td style={{ textAlign: 'right', color: '#dc2626' }} className="font-mono">{s.absent.toLocaleString()}</td>
-                            <td style={{ textAlign: 'right', color: '#64748b' }} className="font-mono">{s.not_applicable.toLocaleString()}</td>
+                            <td style={{ textAlign: 'right', color: '#16a34a' }} className="font-mono">{safeFormatNumber(s.present)}</td>
+                            <td style={{ textAlign: 'right', color: '#dc2626' }} className="font-mono">{safeFormatNumber(s.absent)}</td>
+                            <td style={{ textAlign: 'right', color: '#64748b' }} className="font-mono">{safeFormatNumber(s.not_applicable)}</td>
                             <td style={{ textAlign: 'right' }} className="font-mono font-semibold">
                               {s.attendance_pct}%
                             </td>
@@ -452,12 +458,12 @@ export default function PipelineResults({ results, dataset }) {
                       </tr>
                     </thead>
                     <tbody>
-                      {attendance_results.vendor_wise.map((v) => (
+                      {attendance_results?.vendor_wise?.map((v) => (
                         <tr key={v.vendor}>
                           <td className="font-semibold">{v.vendor}</td>
-                          <td style={{ textAlign: 'right' }} className="font-mono">{v.student_count.toLocaleString()}</td>
-                          <td style={{ textAlign: 'right' }} className="font-mono">{v.total_attended.toLocaleString()}</td>
-                          <td style={{ textAlign: 'right' }} className="font-mono">{v.total_conducted.toLocaleString()}</td>
+                          <td style={{ textAlign: 'right' }} className="font-mono">{safeFormatNumber(v.student_count)}</td>
+                          <td style={{ textAlign: 'right' }} className="font-mono">{safeFormatNumber(v.total_attended)}</td>
+                          <td style={{ textAlign: 'right' }} className="font-mono">{safeFormatNumber(v.total_conducted)}</td>
                           <td style={{ textAlign: 'right' }} className="font-mono font-semibold">
                             {v.avg_attendance_pct}%
                           </td>
@@ -479,7 +485,7 @@ export default function PipelineResults({ results, dataset }) {
                       Student-Wise Recalculated Attendance Records
                     </div>
                     <span className="agg-card-subtitle">
-                      Showing {filteredStudents.length.toLocaleString()} matching student record{filteredStudents.length !== 1 ? 's' : ''}
+                      Showing {safeFormatNumber(filteredStudents?.length)} matching student record{filteredStudents?.length !== 1 ? 's' : ''}
                     </span>
                   </div>
 
@@ -656,7 +662,7 @@ export default function PipelineResults({ results, dataset }) {
                   <DollarSign size={20} />
                 </div>
               </div>
-              <div className="kpi-value">{formatCurrency(metrics.total_sales)}</div>
+              <div className="kpi-value">{formatCurrency(metrics?.total_sales)}</div>
               <div className="kpi-meta">Calculated sum of all valid transactions</div>
             </div>
 
@@ -667,7 +673,7 @@ export default function PipelineResults({ results, dataset }) {
                   <Package size={20} />
                 </div>
               </div>
-              <div className="kpi-value">{metrics.total_quantity?.toLocaleString() || 0}</div>
+              <div className="kpi-value">{safeFormatNumber(metrics?.total_quantity)}</div>
               <div className="kpi-meta">Units sold across all categories</div>
             </div>
 
@@ -678,7 +684,7 @@ export default function PipelineResults({ results, dataset }) {
                   <ShoppingCart size={20} />
                 </div>
               </div>
-              <div className="kpi-value">{metrics.transaction_count?.toLocaleString() || 0}</div>
+              <div className="kpi-value">{safeFormatNumber(metrics?.transaction_count)}</div>
               <div className="kpi-meta">Verified individual orders in PostgreSQL</div>
             </div>
 
@@ -689,7 +695,7 @@ export default function PipelineResults({ results, dataset }) {
                   <TrendingUp size={20} />
                 </div>
               </div>
-              <div className="kpi-value">{formatCurrency(metrics.average_transaction_value)}</div>
+              <div className="kpi-value">{formatCurrency(metrics?.average_transaction_value)}</div>
               <div className="kpi-meta">Total sales ÷ total transaction count</div>
             </div>
 
@@ -700,7 +706,7 @@ export default function PipelineResults({ results, dataset }) {
                   <CheckCircle size={20} />
                 </div>
               </div>
-              <div className="kpi-value text-success">{(metrics.validation_score || 100).toFixed(1)}%</div>
+              <div className="kpi-value text-success">{((metrics?.validation_score ?? 100)).toFixed(1)}%</div>
               <div className="kpi-meta">Passed Checks ÷ Total Checks</div>
             </div>
           </div>
@@ -740,8 +746,8 @@ export default function PipelineResults({ results, dataset }) {
                         <tr key={item.city}>
                           <td className="city-name font-semibold">{item.city}</td>
                           <td style={{ textAlign: 'right' }} className="font-mono">{formatCurrency(item.total_sales)}</td>
-                          <td style={{ textAlign: 'right' }} className="font-mono">{item.total_quantity?.toLocaleString()}</td>
-                          <td style={{ textAlign: 'right' }} className="font-mono">{item.transaction_count?.toLocaleString()}</td>
+                          <td style={{ textAlign: 'right' }} className="font-mono">{safeFormatNumber(item.total_quantity)}</td>
+                          <td style={{ textAlign: 'right' }} className="font-mono">{safeFormatNumber(item.transaction_count)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -773,8 +779,8 @@ export default function PipelineResults({ results, dataset }) {
                         <tr key={item.category}>
                           <td className="font-semibold">{item.category}</td>
                           <td style={{ textAlign: 'right' }} className="font-mono">{formatCurrency(item.total_sales)}</td>
-                          <td style={{ textAlign: 'right' }} className="font-mono">{item.total_quantity?.toLocaleString()}</td>
-                          <td style={{ textAlign: 'right' }} className="font-mono">{item.transaction_count?.toLocaleString()}</td>
+                          <td style={{ textAlign: 'right' }} className="font-mono">{safeFormatNumber(item.total_quantity)}</td>
+                          <td style={{ textAlign: 'right' }} className="font-mono">{safeFormatNumber(item.transaction_count)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -808,8 +814,8 @@ export default function PipelineResults({ results, dataset }) {
                         <tr key={item.transaction_date}>
                           <td className="font-mono">{item.transaction_date}</td>
                           <td style={{ textAlign: 'right' }} className="font-mono">{formatCurrency(item.total_sales)}</td>
-                          <td style={{ textAlign: 'right' }} className="font-mono">{item.total_quantity?.toLocaleString()}</td>
-                          <td style={{ textAlign: 'right' }} className="font-mono">{item.transaction_count?.toLocaleString()}</td>
+                          <td style={{ textAlign: 'right' }} className="font-mono">{safeFormatNumber(item.total_quantity)}</td>
+                          <td style={{ textAlign: 'right' }} className="font-mono">{safeFormatNumber(item.transaction_count)}</td>
                         </tr>
                       ))}
                     </tbody>

@@ -144,7 +144,7 @@ export default function DataCorrectionModal({
                 Review and Fix Data Before Execution
               </h3>
               <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#64748b' }}>
-                Contract: <strong>{analysisData?.contract_name || contractName}</strong> ({analysisData?.contract_type || 'auto'}) • Total Rows: {analysisData?.total_rows?.toLocaleString() || 0}
+                Contract: <strong>{analysisData?.contract_name || contractName}</strong> ({analysisData?.contract_type || 'auto'}) • Total Rows: {Number(analysisData?.total_rows ?? 0).toLocaleString()}
               </p>
             </div>
           </div>
@@ -297,7 +297,7 @@ export default function DataCorrectionModal({
                               marginLeft: 'auto',
                               fontWeight: 500
                             }}>
-                              Affects {prop.affected_rows?.toLocaleString()} row{prop.affected_rows !== 1 ? 's' : ''}
+                              Affects {Number(prop?.affected_rows ?? 0).toLocaleString()} row{prop?.affected_rows !== 1 ? 's' : ''}
                             </span>
                           </div>
 

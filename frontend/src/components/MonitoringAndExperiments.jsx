@@ -93,7 +93,7 @@ export default function MonitoringAndExperiments() {
           <div style={{ background: '#f8fafc', padding: '14px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
             <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase' }}>Total Rows Processed</div>
             <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#1e293b', marginTop: '4px' }}>
-              {dashboard.total_rows_processed?.toLocaleString()}
+              {Number(dashboard?.total_rows_processed ?? 0).toLocaleString()}
             </div>
             <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
               Zero Fake Data

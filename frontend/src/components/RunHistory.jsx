@@ -500,7 +500,7 @@ export default function RunHistory({ onSelectRunForDiagnosis }) {
                     <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                       <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase' }}>Format & Rows</div>
                       <div style={{ fontWeight: '600', marginTop: '4px' }}>
-                        {artifacts?.file_format} • {artifacts?.row_count?.toLocaleString()} rows
+                        {artifacts?.file_format} • {Number(artifacts?.row_count ?? 0).toLocaleString()} rows
                       </div>
                     </div>
                     <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
